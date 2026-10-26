@@ -119,5 +119,12 @@ export interface Draft {
 }
 
 
-export type ApiConnectionStatus = 'connected' | 'waking' | 'offline';
+export type ApiConnectionStatus =
+  | 'connected'
+  | 'waking'
+  | 'blocked_by_client'
+  | 'cors_error'
+  | 'offline';
+
 export type UserRole = 'creator' | 'reviewer';
+

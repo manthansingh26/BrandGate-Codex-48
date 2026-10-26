@@ -59,7 +59,9 @@ export const App: React.FC = () => {
 
   // Check API health and dynamically fetch brands (NO hardcoded brand IDs)
   const initApp = async () => {
-    const status = await api.checkHealth();
+    const status = await api.checkHealth((intermediateStatus) => {
+      setApiStatus(intermediateStatus);
+    });
     setApiStatus(status);
 
     if (status === 'connected') {
@@ -72,6 +74,7 @@ export const App: React.FC = () => {
         console.warn('Could not load brands from API:', err);
       }
     } else {
+
       setActiveBrand({
         id: '00000000-0000-0000-0000-000000000001',
         name: 'Demo Brand (Seeded)',

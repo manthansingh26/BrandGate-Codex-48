@@ -151,12 +151,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
 
         {/* Right Header Elements */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {/* API Health */}
           <div
-            onClick={onRefreshHealth}
-            title="Click to re-check API connection"
-            className="cursor-pointer flex items-center gap-2 px-3 py-1 rounded-full text-xs border transition-colors hover:border-zinc-700"
+            title="API Connection Status"
+            className="flex items-center gap-2 px-3 py-1 rounded-full text-xs border bg-zinc-950 border-zinc-800 transition-colors"
           >
             {apiStatus === 'connected' && (
               <span className="flex items-center gap-1.5 text-teal-400 font-medium">
@@ -167,18 +166,43 @@ export const Navbar: React.FC<NavbarProps> = ({
             {apiStatus === 'waking' && (
               <span className="flex items-center gap-1.5 text-amber-400 font-medium">
                 <RefreshCw className="h-3 w-3 animate-spin" />
-                Waking up server...
+                Waking up server... please wait, retrying...
+              </span>
+            )}
+            {apiStatus === 'blocked_by_client' && (
+              <span className="flex items-center gap-1.5 text-red-400 font-medium max-w-xs sm:max-w-md truncate">
+                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                Connection blocked by browser extension — disable ad blocker / Brave Shield for this site, then click Retry
+              </span>
+            )}
+            {apiStatus === 'cors_error' && (
+              <span className="flex items-center gap-1.5 text-red-400 font-medium">
+                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                Connection blocked (CORS) — check FRONTEND_URL in Render
               </span>
             )}
             {apiStatus === 'offline' && (
               <span className="flex items-center gap-1.5 text-amber-500 font-medium">
-                <AlertCircle className="h-3.5 w-3.5" />
+                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
                 API offline — local demo mode
               </span>
             )}
           </div>
 
+          {/* Retry Connection Button */}
+          {apiStatus !== 'connected' && (
+            <button
+              onClick={onRefreshHealth}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-teal-500 hover:bg-teal-400 text-black transition-all shadow-md active:scale-95"
+              title="Re-run health check immediately"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Retry connection
+            </button>
+          )}
+
           {/* User Auth Buttons */}
+
           {currentUserEmail ? (
             <div className="flex items-center gap-2">
               <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300">

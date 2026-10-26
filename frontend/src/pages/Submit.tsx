@@ -161,7 +161,7 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
       </div>
 
       {/* API Status Banner */}
-      <div className="mb-6 p-3 rounded-xl border flex items-center justify-between text-xs bg-zinc-950 border-zinc-800">
+      <div className="mb-6 p-3.5 rounded-xl border flex flex-wrap items-center justify-between gap-2 text-xs bg-zinc-950 border-zinc-800">
         <div className="flex items-center gap-2">
           <span className="font-semibold text-zinc-400">Review Engine:</span>
           {apiStatus === 'connected' && (
@@ -173,7 +173,19 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
           {apiStatus === 'waking' && (
             <span className="text-amber-400 flex items-center gap-1 font-medium">
               <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-              Waking up server...
+              Waking up server... please wait, retrying...
+            </span>
+          )}
+          {apiStatus === 'blocked_by_client' && (
+            <span className="text-red-400 flex items-center gap-1 font-medium">
+              <AlertCircle className="h-3.5 w-3.5" />
+              Connection blocked by browser extension — disable ad blocker / Brave Shield for this site, then click Retry
+            </span>
+          )}
+          {apiStatus === 'cors_error' && (
+            <span className="text-red-400 flex items-center gap-1 font-medium">
+              <AlertCircle className="h-3.5 w-3.5" />
+              Connection blocked (CORS) — check FRONTEND_URL in Render
             </span>
           )}
           {apiStatus === 'offline' && (
@@ -183,7 +195,19 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
             </span>
           )}
         </div>
+
+        {apiStatus !== 'connected' && (
+          <button
+            onClick={handleReview}
+            disabled={reviewing}
+            className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-teal-400 border border-zinc-700 transition-colors"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Retry Review
+          </button>
+        )}
       </div>
+
 
       {error && (
         <div className="mb-6 p-3 rounded-lg bg-red-950/40 border border-red-900 text-red-400 text-sm">
