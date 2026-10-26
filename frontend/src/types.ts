@@ -49,6 +49,36 @@ export interface DraftVersion {
   created_at?: string;
 }
 
+export interface Decision {
+  id?: string;
+  draft_id?: string;
+  version_no: number;
+  role: string;
+  decision: 'approve' | 'request_changes' | 'request_approval' | 'edit' | 're_review';
+  comment?: string | null;
+  created_at?: string;
+}
+
+export interface CommentItem {
+  id?: string;
+  draft_id?: string;
+  version_no: number;
+  role: string;
+  text: string;
+  created_at?: string;
+}
+
+export interface ApprovedSnapshot {
+  locked: boolean;
+  approved_text: string;
+  image_reference?: string | null;
+  alt_text?: string | null;
+  approver_role: string;
+  approver_id?: string | null;
+  timestamp: string;
+  vault_version: string;
+}
+
 export interface Draft {
   id: string;
   brand_id: string;
@@ -59,13 +89,16 @@ export interface Draft {
   status: DraftStatus;
   current_version: number;
   created_by_role: 'creator' | 'reviewer' | 'guest';
+  created_by_user_id?: string | null;
   created_at?: string;
   updated_at?: string;
   versions?: DraftVersion[];
   findings?: Finding[];
-  comments?: any[];
-  decisions?: any[];
+  comments?: CommentItem[];
+  decisions?: Decision[];
+  approved_snapshot?: ApprovedSnapshot | null;
 }
+
 
 export type ApiConnectionStatus = 'connected' | 'waking' | 'offline';
 export type UserRole = 'creator' | 'reviewer';

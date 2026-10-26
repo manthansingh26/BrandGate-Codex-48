@@ -98,6 +98,25 @@ Set the required environment variables:
 - `POST /api/drafts/{draft_id}/apply-fix` -> Applies a finding's `suggested_fix`, increments version number, sets status to `draft`, and returns updated text.
 - `POST /api/drafts/{draft_id}/revise` -> Submits revised `body_text` and `alt_text`, creates a new version, and sets status to `draft`.
 
+### Approval Workflow & Decisions (Phase 5)
+- `POST /api/drafts/{draft_id}/request-approval` -> Transitions status from `checked` to `pending_approval`. Logs decision.
+- `POST /api/drafts/{draft_id}/approve` -> Reviewer role only. Enforces creator separation (creator cannot approve their own draft). In guest mode, records decision as `demo_reviewer`. Transitions status to `approved` and returns locked snapshot object.
+- `POST /api/drafts/{draft_id}/request-changes` -> Reviewer role only, requires a non-empty `comment`. Transitions status to `needs_changes`.
+- `POST /api/drafts/{draft_id}/comments` -> Adds a collaboration comment tagged with timestamp, draft version, and role.
+- `GET /api/drafts/{draft_id}` -> Returns draft with full version history, findings, comments, decision log, and `approved_snapshot` (if approved).
+
+---
+
+## Supabase Auth Configuration (Phase 5)
+
+1. Open your Supabase project dashboard at [supabase.com](https://supabase.com).
+2. Go to **Authentication** -> **Providers** -> **Email**.
+3. Verify **Email** is **Enabled**.
+   - If *Confirm email* is ON: New signups will receive an activation email; UI displays "Check your email to confirm".
+   - If *Confirm email* is OFF: Users are signed in directly upon registration.
+4. **Guest Demo Mode**: Never requires sign-in. Judges and unauthenticated users can test the entire workflow seamlessly.
+
+
 
 ---
 

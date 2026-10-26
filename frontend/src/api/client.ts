@@ -4,9 +4,25 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 class ApiClient {
   private base: string;
+  private token: string | null = null;
 
   constructor() {
     this.base = API_BASE.replace(/\/+$/, '');
+  }
+
+  setAuthToken(token: string | null) {
+    this.token = token;
+  }
+
+  private getHeaders(customHeaders: Record<string, string> = {}): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...customHeaders,
+    };
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+    return headers;
   }
 
   // Health check with timeout
@@ -95,7 +111,7 @@ class ApiClient {
   }): Promise<Draft> {
     const res = await fetch(`${this.base}/api/drafts`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders(),
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -106,7 +122,9 @@ class ApiClient {
   }
 
   async getDraft(draftId: string): Promise<Draft> {
-    const res = await fetch(`${this.base}/api/drafts/${draftId}`);
+    const res = await fetch(`${this.base}/api/drafts/${draftId}`, {
+      headers: this.getHeaders(),
+    });
     if (!res.ok) throw new Error('Failed to fetch draft');
     return res.json();
   }
@@ -114,6 +132,7 @@ class ApiClient {
   async reviewDraft(draftId: string): Promise<Finding[]> {
     const res = await fetch(`${this.base}/api/drafts/${draftId}/review`, {
       method: 'POST',
+      headers: this.getHeaders(),
     });
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
@@ -130,7 +149,7 @@ class ApiClient {
   }> {
     const res = await fetch(`${this.base}/api/drafts/${draftId}/apply-fix`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders(),
       body: JSON.stringify({ finding_id: findingId }),
     });
     if (!res.ok) {
@@ -143,7 +162,7 @@ class ApiClient {
   async reviseDraft(draftId: string, payload: { body_text: string; alt_text?: string | null }): Promise<Draft> {
     const res = await fetch(`${this.base}/api/drafts/${draftId}/revise`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders(),
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -152,6 +171,60 @@ class ApiClient {
     }
     return res.json();
   }
+
+  // Phase 5 Approval Workflow Methods
+  async requestApproval(draftId: string, comment?: string, role: string = 'creator'): Promise<any> {
+    const res = await fetch(`${this.base}/api/drafts/${draftId}/request-approval`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ comment, role }),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || 'Failed to request approval');
+    }
+    return res.json();
+  }
+
+  async approveDraft(draftId: string, comment?: string, role: string = 'demo_reviewer'): Promise<any> {
+    const res = await fetch(`${this.base}/api/drafts/${draftId}/approve`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ comment, role }),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || 'Approval failed');
+    }
+    return res.json();
+  }
+
+  async requestChanges(draftId: string, comment: string): Promise<any> {
+    const res = await fetch(`${this.base}/api/drafts/${draftId}/request-changes`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ comment }),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || 'Failed to request changes');
+    }
+    return res.json();
+  }
+
+  async addComment(draftId: string, text: string, role: string = 'guest'): Promise<any> {
+    const res = await fetch(`${this.base}/api/drafts/${draftId}/comments`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ text, role }),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || 'Failed to add comment');
+    }
+    return res.json();
+  }
+
 }
 
 export const api = new ApiClient();

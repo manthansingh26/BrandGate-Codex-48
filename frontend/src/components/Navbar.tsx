@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ApiConnectionStatus, UserRole } from '../types';
-import { ShieldCheck, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import { AuthModal } from './AuthModal';
+import { AlertCircle, RefreshCw, LogIn, LogOut, User } from 'lucide-react';
 
 interface NavbarProps {
   activeTab: string;
@@ -8,6 +9,8 @@ interface NavbarProps {
   apiStatus: ApiConnectionStatus;
   userRole: UserRole;
   setUserRole: (role: UserRole) => void;
+  currentUserEmail: string | null;
+  onSignOut: () => void;
   onRefreshHealth: () => void;
 }
 
@@ -17,8 +20,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   apiStatus,
   userRole,
   setUserRole,
+  currentUserEmail,
+  onSignOut,
   onRefreshHealth,
 }) => {
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
   return (
     <header className="border-b border-zinc-800 bg-black/90 backdrop-blur-md sticky top-0 z-50">
       {/* Honesty Banner */}
@@ -28,11 +35,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             Seeded demo brand
           </span>
           <span className="hidden sm:inline text-zinc-500">
-            Guest demo — data is shared demo data
+            {currentUserEmail ? `Account: ${currentUserEmail}` : 'Guest demo — data is shared demo data'}
           </span>
         </div>
         <div className="flex items-center gap-2 text-zinc-400">
-          <span>Demo roles — real accounts are a later phase (Phase 5)</span>
+          <span>Demo roles — real accounts are a later improvement</span>
           <div className="inline-flex rounded-md border border-zinc-800 p-0.5 bg-zinc-900">
             <button
               onClick={() => setUserRole('creator')}
@@ -132,8 +139,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
         </div>
 
-        {/* API Status Badge */}
+        {/* Right Header Elements */}
         <div className="flex items-center gap-3">
+          {/* API Health */}
           <div
             onClick={onRefreshHealth}
             title="Click to re-check API connection"
@@ -158,8 +166,39 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             )}
           </div>
+
+          {/* User Auth Buttons */}
+          {currentUserEmail ? (
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300">
+                <User className="h-3 w-3 text-teal-400" />
+                {currentUserEmail.split('@')[0]}
+              </span>
+              <button
+                onClick={onSignOut}
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-lg border border-zinc-800 hover:border-zinc-700 text-xs text-zinc-400 hover:text-white transition-colors"
+              >
+                <LogOut className="h-3 w-3" />
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAuthModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs text-white font-medium transition-colors"
+            >
+              <LogIn className="h-3 w-3 text-teal-400" />
+              Sign in
+            </button>
+          )}
         </div>
       </div>
+
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onAuthSuccess={() => setAuthModalOpen(false)}
+      />
     </header>
   );
 };

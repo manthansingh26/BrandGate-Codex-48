@@ -42,14 +42,20 @@ The frontend reads configuration through Vite environment variables (`import.met
 
 ---
 
-## Acceptance Testing Guide
+## Phase 5 Approval Workflow & Auth Guide
 
-1. Open [http://localhost:5173](http://localhost:5173) in your browser.
-2. Click **"Try the demo draft"** on the home page.
-3. Observe the Submit page loaded with the exact Diwali cookware draft text.
-4. Click **"Review Draft"** and observe the Report page with:
-   - Price contradiction cited `F-12` with suggested fix `"Rs. 1,299"`.
-   - Evidence needed findings cited `R-04` for superlative claims.
-   - Zero findings without citation IDs.
-5. Click **"Apply Fix: 'Rs. 1,299'"** and confirm the contradiction disappears and the version updates to `v2`.
-6. Terminate the backend server, refresh the browser, and observe the status badge change to **"API offline — local demo mode"**.
+1. Open [http://localhost:5173](http://localhost:5173).
+2. Click **"Try the demo draft"** and press **"Review Draft"**.
+3. Apply the price fix (`F-12`) so contradictions are resolved.
+4. Navigate to the **Review** page:
+   - Notice that while in **Creator** mode, the **"Approve Draft"** button is disabled with the notice: *"Reviewer approval required"*.
+   - Click **"Request Approval"** to submit the draft for review. Draft status updates to `pending_approval`.
+   - In the top navigation bar, toggle the role to **Reviewer**.
+   - Click **"Approve Draft"**.
+   - Observe the **LOCKED APPROVED SNAPSHOT** banner appear with verified timestamp, approver role (`demo_reviewer`), and compliance metadata.
+5. Edit the copy via Submit or apply a new revision. Verify via `GET /api/drafts/{draft_id}` that the draft status resets to `draft` server-side and the locked snapshot is cleared.
+6. Optional Real Account Test:
+   - Click **"Sign in"** in the top navigation bar and select **"Sign Up"**.
+   - Sign up with an email and password. Upon sign in, decisions and comments will be attributed to your authenticated account.
+   - Click **"Sign out"** to return to guest demo mode at any time.
+

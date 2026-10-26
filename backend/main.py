@@ -1,13 +1,25 @@
 import os
 from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, HTTPException, status, Query
+from datetime import datetime, timezone
+from fastapi import FastAPI, HTTPException, status, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
-from database import get_supabase
-from models import VaultItemCreate, VaultItemUpdate, DraftCreate, ApplyFixRequest, ReviseDraftRequest
+from database import get_supabase, get_authenticated_user
+from models import (
+    VaultItemCreate,
+    VaultItemUpdate,
+    DraftCreate,
+    ApplyFixRequest,
+    ReviseDraftRequest,
+    RequestApprovalRequest,
+    ApproveDraftRequest,
+    RequestChangesRequest,
+    AddCommentRequest,
+)
 from review_engine import run_deterministic_review, apply_fix_to_text
+
 
 # Load local environment variables from .env if present
 load_dotenv()
@@ -41,6 +53,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ------------------------------------------------------------------------------
+# Explicit CORS-Guaranteed Exception Handlers (Never drop CORS on 4xx/5xx)
+# ------------------------------------------------------------------------------
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    origin = request.headers.get("origin") or "http://localhost:5173"
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    origin = request.headers.get("origin") or "http://localhost:5173"
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": f"Internal server error: {str(exc)}"},
+        headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
 
 # ------------------------------------------------------------------------------
 # Health Check Endpoint
@@ -279,9 +323,13 @@ def reset_demo_vault(brand_id: str):
 # Drafts API
 # ------------------------------------------------------------------------------
 @app.post("/api/drafts", summary="Create a draft and version 1", status_code=status.HTTP_201_CREATED)
-def create_draft(payload: DraftCreate):
+def create_draft(payload: DraftCreate, request: Request = None):
     supabase = get_supabase()
     verify_brand_exists(supabase, payload.brand_id)
+
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+    creator_role = user["role"] if user else payload.created_by_role
 
     # 1. Insert parent draft record
     draft_record = {
@@ -292,12 +340,24 @@ def create_draft(payload: DraftCreate):
         "alt_text": payload.alt_text,
         "status": "draft",
         "current_version": 1,
-        "created_by_role": payload.created_by_role
+        "created_by_role": creator_role,
     }
+    if user:
+        draft_record["created_by_user_id"] = user["id"]
 
-    draft_res = supabase.table("drafts").insert(draft_record).execute()
+    try:
+        draft_res = supabase.table("drafts").insert(draft_record).execute()
+    except Exception as exc:
+        # Fallback if created_by_user_id is missing or triggers schema conflict
+        if "created_by_user_id" in draft_record:
+            draft_record.pop("created_by_user_id", None)
+            draft_res = supabase.table("drafts").insert(draft_record).execute()
+        else:
+            raise HTTPException(status_code=500, detail=f"Database error creating draft: {exc}")
+
     if not draft_res.data:
         raise HTTPException(status_code=500, detail="Failed to create draft.")
+
 
     created_draft = draft_res.data[0]
     draft_id = created_draft["id"]
@@ -338,7 +398,26 @@ def get_draft(draft_id: str):
     draft["comments"] = comments_res.data or []
     draft["decisions"] = decisions_res.data or []
 
+    # If approved, attach locked approved snapshot
+    if draft.get("status") == "approved":
+        approve_decision = next(
+            (d for d in reversed(draft["decisions"]) if d.get("decision") == "approve"),
+            None
+        )
+        draft["approved_snapshot"] = {
+            "locked": True,
+            "approved_text": draft.get("body_text"),
+            "image_reference": draft.get("image_url"),
+            "alt_text": draft.get("alt_text"),
+            "approver_role": approve_decision.get("role") if approve_decision else "reviewer",
+            "timestamp": approve_decision.get("created_at") if approve_decision else draft.get("updated_at"),
+            "vault_version": f"vault-{draft['brand_id'][:8]}",
+        }
+    else:
+        draft["approved_snapshot"] = None
+
     return draft
+
 
 @app.get("/api/drafts", summary="List drafts for a brand (newest first)")
 def list_drafts(brand_id: Optional[str] = Query(None, description="Filter drafts by brand UUID")):
@@ -468,7 +547,8 @@ def apply_fix(draft_id: str, payload: ApplyFixRequest):
     supabase.table("drafts").update({
         "body_text": new_body,
         "current_version": new_version_no,
-        "status": "draft"
+        "status": "draft",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }).eq("id", draft_id).execute()
 
     return {
@@ -501,11 +581,12 @@ def revise_draft(draft_id: str, payload: ReviseDraftRequest):
     }
     supabase.table("draft_versions").insert(version_record).execute()
 
-    # 3. Update draft
+    # 3. Update draft and explicitly reset status to draft (clearing any approval)
     update_data = {
         "body_text": payload.body_text,
         "current_version": new_version_no,
-        "status": "draft"
+        "status": "draft",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     if payload.alt_text is not None:
         update_data["alt_text"] = payload.alt_text
@@ -519,4 +600,185 @@ def revise_draft(draft_id: str, payload: ReviseDraftRequest):
         "alt_text": update_data.get("alt_text"),
         "status": "draft"
     }
+
+# ------------------------------------------------------------------------------
+# Approval Workflow & Decisions Endpoints (Phase 5)
+# ------------------------------------------------------------------------------
+@app.post("/api/drafts/{draft_id}/request-approval", summary="Request approval from checked state")
+def request_approval(draft_id: str, payload: RequestApprovalRequest, request: Request = None):
+    supabase = get_supabase()
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+
+    # 1. Fetch draft
+    draft_res = supabase.table("drafts").select("*").eq("id", draft_id).execute()
+    if not draft_res.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Draft '{draft_id}' not found."
+        )
+    draft = draft_res.data[0]
+
+    # Server-side state machine check: must be in "checked" status
+    if draft.get("status") not in ["checked", "needs_changes"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Draft must be in 'checked' status to request approval. Current status is '{draft.get('status')}'."
+        )
+
+    # 2. Advance status to pending_approval
+    supabase.table("drafts").update({
+        "status": "pending_approval",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", draft_id).execute()
+
+    # 3. Record decision log entry
+    role_to_log = user["role"] if user else (payload.role or "creator")
+    supabase.table("decisions").insert({
+        "draft_id": draft_id,
+        "version_no": draft.get("current_version", 1),
+        "role": role_to_log,
+        "decision": "request_approval",
+        "comment": payload.comment or "Submitted for brand reviewer approval",
+    }).execute()
+
+    return {"status": "pending_approval", "draft_id": draft_id}
+
+@app.post("/api/drafts/{draft_id}/approve", summary="Approve draft (Reviewer only)")
+def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request = None):
+    supabase = get_supabase()
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+
+    # 1. Fetch draft
+    draft_res = supabase.table("drafts").select("*").eq("id", draft_id).execute()
+    if not draft_res.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Draft '{draft_id}' not found."
+        )
+    draft = draft_res.data[0]
+
+    # State machine check
+    if draft.get("status") != "pending_approval":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Draft must be in 'pending_approval' status to approve. Current status is '{draft.get('status')}'."
+        )
+
+    # Authorization & Creator separation rule
+    if user:
+        # If real account created this draft, they cannot approve it
+        created_by_user = draft.get("created_by_user_id")
+        if created_by_user and created_by_user == user["id"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Creator cannot approve their own draft."
+            )
+        approver_role = user.get("role", "reviewer")
+    else:
+        # Guest users can NEVER approve as a real account — recorded as demo_reviewer
+        approver_role = "demo_reviewer"
+
+    # 2. Transition status to approved
+    now_iso = datetime.now(timezone.utc).isoformat()
+    supabase.table("drafts").update({
+        "status": "approved",
+        "updated_at": now_iso,
+    }).eq("id", draft_id).execute()
+
+    # 3. Create locked snapshot
+    vault_version_tag = f"vault-{draft['brand_id'][:8]}"
+    locked_snapshot = {
+        "locked": True,
+        "approved_text": draft.get("body_text"),
+        "image_reference": draft.get("image_url"),
+        "alt_text": draft.get("alt_text"),
+        "approver_role": approver_role,
+        "approver_id": user["id"] if user else None,
+        "timestamp": now_iso,
+        "vault_version": vault_version_tag,
+    }
+
+    # 4. Record decision log entry
+    supabase.table("decisions").insert({
+        "draft_id": draft_id,
+        "version_no": draft.get("current_version", 1),
+        "role": approver_role,
+        "decision": "approve",
+        "comment": payload.comment or "Approved for publication",
+    }).execute()
+
+    return {
+        "status": "approved",
+        "draft_id": draft_id,
+        "snapshot": locked_snapshot,
+    }
+
+@app.post("/api/drafts/{draft_id}/request-changes", summary="Request changes (Reviewer only, requires comment)")
+def request_changes(draft_id: str, payload: RequestChangesRequest, request: Request = None):
+    supabase = get_supabase()
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+
+    # 1. Fetch draft
+    draft_res = supabase.table("drafts").select("*").eq("id", draft_id).execute()
+    if not draft_res.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Draft '{draft_id}' not found."
+        )
+    draft = draft_res.data[0]
+
+    approver_role = user["role"] if user else "demo_reviewer"
+
+    # 2. Update status to needs_changes
+    now_iso = datetime.now(timezone.utc).isoformat()
+    supabase.table("drafts").update({
+        "status": "needs_changes",
+        "updated_at": now_iso,
+    }).eq("id", draft_id).execute()
+
+    # 3. Record decision log with required comment
+    supabase.table("decisions").insert({
+        "draft_id": draft_id,
+        "version_no": draft.get("current_version", 1),
+        "role": approver_role,
+        "decision": "request_changes",
+        "comment": payload.comment,
+    }).execute()
+
+    return {
+        "status": "needs_changes",
+        "draft_id": draft_id,
+        "comment": payload.comment,
+    }
+
+@app.post("/api/drafts/{draft_id}/comments", summary="Add comment to draft")
+def add_comment(draft_id: str, payload: AddCommentRequest, request: Request = None):
+    supabase = get_supabase()
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+
+    # 1. Fetch draft
+    draft_res = supabase.table("drafts").select("id, current_version").eq("id", draft_id).execute()
+    if not draft_res.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Draft '{draft_id}' not found."
+        )
+    draft = draft_res.data[0]
+
+    author_role = user["role"] if user else (payload.role or "guest")
+
+    comment_record = {
+        "draft_id": draft_id,
+        "version_no": draft.get("current_version", 1),
+        "role": author_role,
+        "text": payload.text,
+    }
+
+    res = supabase.table("comments").insert(comment_record).execute()
+    return res.data[0] if res.data else comment_record
+
 

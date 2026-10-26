@@ -46,9 +46,11 @@ CREATE TABLE IF NOT EXISTS drafts (
     status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'checked', 'pending_approval', 'approved', 'needs_changes')),
     current_version INT NOT NULL DEFAULT 1,
     created_by_role TEXT NOT NULL CHECK (created_by_role IN ('creator', 'reviewer', 'guest')),
+    created_by_user_id UUID,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
 
 CREATE INDEX IF NOT EXISTS idx_drafts_brand ON drafts(brand_id);
 CREATE INDEX IF NOT EXISTS idx_drafts_status ON drafts(status);

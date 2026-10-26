@@ -63,3 +63,33 @@ class ReviseDraftRequest(BaseModel):
             raise ValueError("body_text cannot be empty")
         return value.strip()
 
+class RequestApprovalRequest(BaseModel):
+    comment: Optional[str] = None
+    role: Optional[str] = "creator"
+
+class ApproveDraftRequest(BaseModel):
+    comment: Optional[str] = None
+    role: Optional[str] = "demo_reviewer"
+
+class RequestChangesRequest(BaseModel):
+    comment: str = Field(..., min_length=1, description="Reason for requesting changes is required")
+
+    @field_validator("comment")
+    @classmethod
+    def validate_comment(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("Comment cannot be empty when requesting changes")
+        return value.strip()
+
+class AddCommentRequest(BaseModel):
+    text: str = Field(..., min_length=1)
+    role: Optional[str] = "guest"
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("Comment text cannot be empty")
+        return value.strip()
+
+
