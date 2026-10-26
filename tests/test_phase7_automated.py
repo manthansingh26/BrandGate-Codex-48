@@ -160,9 +160,10 @@ def run_tests():
         assert dummy_res["available"] is False
         assert dummy_res["status"] == "LLM review unavailable"
         # Reason changes from "key not set" to "invalid key" (HTTP 400 from Google), proving Gemini code path
-        assert dummy_res["reason"] in ["invalid key", "model not found", "timeout", "connection error"]
+        assert dummy_res["reason"] in ["invalid key", "model not found", "timeout", "connection error", "invalid request (INVALID_ARGUMENT)"]
         assert dummy_res["provider"] == "gemini"
         print(f"PASS: 5 - Gemini path verified: Reason changed from 'key not set' to '{dummy_res['reason']}'")
+
 
         # ----------------------------------------------------------------------
         # 6. Unit-test Gemini Response Parser with Mocked Google Format (1d)

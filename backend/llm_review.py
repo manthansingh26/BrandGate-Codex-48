@@ -342,8 +342,14 @@ def call_gemini_review(
         if http_err.code == 404:
             reason_msg = "model not found"
         elif http_err.code in [400, 401, 403]:
-            reason_msg = "invalid key" if "API_KEY" in google_status or "API_KEY" in google_msg else f"invalid request ({google_status})"
+            lower_msg = google_msg.lower()
+            lower_status = google_status.lower()
+            if "api key" in lower_msg or "api_key" in lower_status or "api_key" in lower_msg or "key" in lower_msg:
+                reason_msg = "invalid key"
+            else:
+                reason_msg = f"invalid request ({google_status})"
         elif http_err.code == 429:
+
             reason_msg = "rate limit"
         elif http_err.code == 503:
             reason_msg = "model high demand"
