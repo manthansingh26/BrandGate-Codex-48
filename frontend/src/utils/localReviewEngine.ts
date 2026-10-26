@@ -88,8 +88,11 @@ export function runLocalDemoReview(
     const regex = new RegExp(`\\b${claim}\\b`, 'i');
     if (regex.test(bodyText)) {
       let suggested: string | null = null;
-      if (claim.toLowerCase().includes('no. 1')) suggested = 'trusted by millions';
-      if (claim.toLowerCase().includes('clinically')) suggested = 'certified quality';
+      if (claim.toLowerCase().includes('no. 1')) {
+        suggested = 'trusted';
+      } else if (claim.toLowerCase().includes('clinically')) {
+        suggested = 'certified quality';
+      }
 
       rawFindings.push({
         id: `local-claim-${claim}-${Date.now()}`,
@@ -114,6 +117,19 @@ export function runLocalDemoReview(
     });
   }
 
+  // 4. Logo check (A-02)
+  if (imageUrl) {
+    rawFindings.push({
+      id: `local-logo-${Date.now()}`,
+      lane: 'human_decision',
+      severity: 'medium',
+      citation_id: 'A-02',
+      explanation: '[Local demo check — backend unavailable] Logo not reviewer-confirmed. Current approved logo file required under rule A-02; archived logos are not accepted.',
+      suggested_fix: null,
+    });
+  }
+
   // Mandatory Citation Validator: Drop any finding without active citation
   return rawFindings.filter((f) => validCitationIds.has(f.citation_id));
 }
+

@@ -49,12 +49,16 @@ export const Report: React.FC<ReportProps> = ({
         let newBody = draft.body_text;
         if (finding.citation_id === 'F-12' || finding.suggested_fix.includes('Rs.')) {
           newBody = newBody.replace(/(?:Rs\.?|INR|₹)\s*[\d,]+/gi, finding.suggested_fix);
+        } else if (finding.citation_id === 'R-04' && finding.suggested_fix === 'trusted') {
+          // Replace entire "India's No. 1" so NO "No. 1" fragment remains anywhere
+          newBody = newBody.replace(/(?:India['’]?s\s*)?No\.?\s*1/gi, 'trusted');
         } else if (finding.suggested_fix) {
           const match = finding.explanation.match(/'(.*?)'/);
           if (match) {
             newBody = newBody.replace(new RegExp(match[1], 'gi'), finding.suggested_fix);
           }
         }
+
 
         const newVersionNo = draft.current_version + 1;
         const localUpdatedDraft: Draft = {

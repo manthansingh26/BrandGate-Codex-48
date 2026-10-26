@@ -225,6 +225,33 @@ class ApiClient {
     return res.json();
   }
 
+  // Phase 6 Image and Insights Endpoints
+  async attachImage(draftId: string, payload: { image_url: string; alt_text?: string | null; logo_confirmed?: boolean }): Promise<any> {
+    const res = await fetch(`${this.base}/api/drafts/${draftId}/image`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || 'Failed to attach image');
+    }
+    return res.json();
+  }
+
+  async getInsights(brandId?: string): Promise<{
+    total_findings: number;
+    counts_by_citation: Record<string, number>;
+    counts_by_lane: Record<string, number>;
+  }> {
+    const url = brandId ? `${this.base}/api/insights?brand_id=${brandId}` : `${this.base}/api/insights`;
+    const res = await fetch(url, { headers: this.getHeaders() });
+    if (!res.ok) {
+      throw new Error('Failed to fetch insights data');
+    }
+    return res.json();
+  }
 }
 
 export const api = new ApiClient();
+

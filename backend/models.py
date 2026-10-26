@@ -92,4 +92,15 @@ class AddCommentRequest(BaseModel):
             raise ValueError("Comment text cannot be empty")
         return value.strip()
 
+class AttachImageRequest(BaseModel):
+    image_url: str = Field(..., min_length=1, description="Public URL of the uploaded creative image")
+    alt_text: Optional[str] = Field(None, description="Image descriptive accessibility alt text")
+    logo_confirmed: bool = Field(False, description="Reviewer confirmed approved current logo only (A-02)")
+
+class ReviewDraftRequest(BaseModel):
+    logo_confirmed: bool = Field(False, description="Reviewer confirmed current logo (A-02)")
+    palette_off: bool = Field(False, description="Client-side canvas sampling detected off-palette colors")
+    contrast_ratio: Optional[float] = Field(None, description="Calculated WCAG text contrast ratio")
+
+
 

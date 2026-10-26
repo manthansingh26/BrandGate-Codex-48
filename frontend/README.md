@@ -42,20 +42,18 @@ The frontend reads configuration through Vite environment variables (`import.met
 
 ---
 
-## Phase 5 Approval Workflow & Auth Guide
+## Phase 6 Image Checks, Storage & Insights Guide
 
-1. Open [http://localhost:5173](http://localhost:5173).
-2. Click **"Try the demo draft"** and press **"Review Draft"**.
-3. Apply the price fix (`F-12`) so contradictions are resolved.
-4. Navigate to the **Review** page:
-   - Notice that while in **Creator** mode, the **"Approve Draft"** button is disabled with the notice: *"Reviewer approval required"*.
-   - Click **"Request Approval"** to submit the draft for review. Draft status updates to `pending_approval`.
-   - In the top navigation bar, toggle the role to **Reviewer**.
-   - Click **"Approve Draft"**.
-   - Observe the **LOCKED APPROVED SNAPSHOT** banner appear with verified timestamp, approver role (`demo_reviewer`), and compliance metadata.
-5. Edit the copy via Submit or apply a new revision. Verify via `GET /api/drafts/{draft_id}` that the draft status resets to `draft` server-side and the locked snapshot is cleared.
-6. Optional Real Account Test:
-   - Click **"Sign in"** in the top navigation bar and select **"Sign Up"**.
-   - Sign up with an email and password. Upon sign in, decisions and comments will be attributed to your authenticated account.
-   - Click **"Sign out"** to return to guest demo mode at any time.
+1. **Supabase Storage Bucket Creation (Manual Step)**:
+   - In your Supabase web dashboard, navigate to **Storage**.
+   - Create a bucket named `brandgate-creatives` with **Public bucket** set to **ON**.
+2. **Submit Page Testing**:
+   - Upload an image file. The client samples dominant colors (labeled "Approximate") and uploads to `brandgate-creatives`.
+   - Test the interactive WCAG Contrast Checker: verify black text on white shows `21:1` and passes AA.
+   - Confirm the Logo check checkbox (A-02): leaving unchecked generates an A-02 review flag; checking it clears the flag.
+3. **Report Page**:
+   - Verify that applying the `F-12` fix and both `R-04` fixes replaces `"India's No. 1"` cleanly with `"trusted"`, leaving zero occurrences of `"No. 1"`.
+4. **Insights Tab**:
+   - Click **Insights** in the navigation bar to inspect real session counts pulled live from the database for each citation ID (`F-12`, `R-04`, `A-02`, etc.).
+
 

@@ -79,7 +79,14 @@ export interface ApprovedSnapshot {
   vault_version: string;
 }
 
+export interface InsightsData {
+  total_findings: number;
+  counts_by_citation: Record<string, number>;
+  counts_by_lane: Record<string, number>;
+}
+
 export interface Draft {
+
   id: string;
   brand_id: string;
   title: string;

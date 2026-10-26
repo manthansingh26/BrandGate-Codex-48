@@ -45,15 +45,20 @@ def run_deterministic_review(
     body_text: str,
     alt_text: Optional[str],
     image_url: Optional[str],
-    active_vault_items: List[Dict[str, Any]]
+    active_vault_items: List[Dict[str, Any]],
+    logo_confirmed: bool = False,
+    palette_off: bool = False,
+    contrast_ratio: Optional[float] = None
 ) -> List[Dict[str, Any]]:
     """
-    Executes the 5 deterministic brand governance checks:
+    Executes deterministic brand governance checks:
     1. Price / number check (Regex matching vs approved facts)
     2. Superlative / performance claims (Evidence needed check, cited R-04)
     3. Terminology check (Banned / restricted terms)
     4. Tone check (Rule-based guideline matching)
     5. Alt-text accessibility check (Cited R-09)
+    6. Logo verification check (Reviewer-confirmed only, cited A-02)
+    7. Palette checking (Approximate sampling, cited P-01)
     """
     raw_findings: List[Dict[str, Any]] = []
 
@@ -62,6 +67,8 @@ def run_deterministic_review(
     facts = [item for item in active_items if item.get("kind") == "fact"]
     rules = [item for item in active_items if item.get("kind") == "rule"]
     terminologies = [item for item in active_items if item.get("kind") == "terminology"]
+    palettes = [item for item in active_items if item.get("kind") == "palette"]
+
 
     # --------------------------------------------------------------------------
     # 1. Price / Number Check
@@ -113,7 +120,8 @@ def run_deterministic_review(
                 if not has_approved_evidence:
                     suggested = None
                     if "no. 1" in claim.lower():
-                        suggested = "trusted by millions"
+                        # Replace the entire superlative phrase so NO "No. 1" fragment remains
+                        suggested = "trusted"
                     elif "clinically" in claim.lower():
                         suggested = "certified quality"
 
@@ -124,6 +132,7 @@ def run_deterministic_review(
                         "explanation": f"Claim '{claim}' is a rank or performance superlative requiring an approved evidence record under rule R-04. The vault currently has no approved evidence record for this claim.",
                         "suggested_fix": suggested
                     })
+
 
     # --------------------------------------------------------------------------
     # 3. Terminology Check
@@ -176,8 +185,36 @@ def run_deterministic_review(
                 "suggested_fix": "Add concise descriptive alt text"
             })
 
+    # --------------------------------------------------------------------------
+    # 6. Logo Verification Check (Reviewer-Confirmed Only, Cited A-02)
+    # --------------------------------------------------------------------------
+    a02_rule = next((item for item in rules if item.get("item_id") == "A-02"), None)
+    if a02_rule and image_url:
+        if not logo_confirmed:
+            raw_findings.append({
+                "lane": "human_decision",
+                "severity": "medium",
+                "citation_id": "A-02",
+                "explanation": "Logo not reviewer-confirmed. Current approved logo file required under rule A-02; archived logos are not accepted.",
+                "suggested_fix": None
+            })
+
+    # --------------------------------------------------------------------------
+    # 7. Approximate Palette Check (Cited P-01)
+    # --------------------------------------------------------------------------
+    if palette_off and palettes:
+        p01_item = next((item for item in palettes if item.get("item_id") == "P-01"), palettes[0])
+        raw_findings.append({
+            "lane": "human_decision",
+            "severity": "low",
+            "citation_id": p01_item.get("item_id"),
+            "explanation": "Palette sampling is approximate — reviewer to confirm brand color alignment with approved palette.",
+            "suggested_fix": None
+        })
+
     # Apply the Mandatory Citation Validator
     return validate_citations(raw_findings, active_items)
+
 
 
 # ------------------------------------------------------------------------------
@@ -206,8 +243,19 @@ def apply_fix_to_text(body_text: str, finding: Dict[str, Any]) -> str:
     match_claim = re.search(r"'(.*?)'", explanation)
     if match_claim:
         target_phrase = match_claim.group(1)
+
+        # Handle "India's No. 1" cleanly so no leftover "'s No. 1" remains
+        if "no. 1" in target_phrase.lower():
+            clean_re = re.compile(r"(?:India['’]?s\s*)?No\.?\s*1", re.IGNORECASE)
+            if clean_re.search(body_text):
+                return clean_re.sub(suggested_fix, body_text, count=1)
+
+        if target_phrase in body_text:
+            return body_text.replace(target_phrase, suggested_fix, 1)
+
         phrase_re = re.compile(re.escape(target_phrase), re.IGNORECASE)
         if phrase_re.search(body_text):
             return phrase_re.sub(suggested_fix, body_text, count=1)
 
     return body_text
+

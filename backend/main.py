@@ -17,8 +17,11 @@ from models import (
     ApproveDraftRequest,
     RequestChangesRequest,
     AddCommentRequest,
+    AttachImageRequest,
+    ReviewDraftRequest,
 )
 from review_engine import run_deterministic_review, apply_fix_to_text
+
 
 
 # Load local environment variables from .env if present
@@ -435,7 +438,7 @@ def list_drafts(brand_id: Optional[str] = Query(None, description="Filter drafts
 # Review Engine & Revision Endpoints (Phase 3)
 # ------------------------------------------------------------------------------
 @app.post("/api/drafts/{draft_id}/review", summary="Run deterministic server-side brand review")
-def review_draft(draft_id: str):
+def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None):
     supabase = get_supabase()
 
     # 1. Fetch draft
@@ -457,12 +460,19 @@ def review_draft(draft_id: str):
     )
     active_vault_items = vault_res.data or []
 
-    # 3. Run the 5 deterministic checks with citation validation
+    # 3. Run deterministic checks with citation validation
+    logo_confirmed = payload.logo_confirmed if payload else False
+    palette_off = payload.palette_off if payload else False
+    contrast_ratio = payload.contrast_ratio if payload else None
+
     validated_findings = run_deterministic_review(
         body_text=draft.get("body_text", ""),
         alt_text=draft.get("alt_text"),
         image_url=draft.get("image_url"),
-        active_vault_items=active_vault_items
+        active_vault_items=active_vault_items,
+        logo_confirmed=logo_confirmed,
+        palette_off=palette_off,
+        contrast_ratio=contrast_ratio,
     )
 
     current_version = draft.get("current_version", 1)
@@ -494,6 +504,90 @@ def review_draft(draft_id: str):
     }).eq("id", draft_id).execute()
 
     return saved_findings
+
+@app.post("/api/drafts/{draft_id}/image", summary="Attach image URL and alt text to draft")
+def attach_image(draft_id: str, payload: AttachImageRequest):
+    supabase = get_supabase()
+
+    draft_res = supabase.table("drafts").select("id").eq("id", draft_id).execute()
+    if not draft_res.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Draft '{draft_id}' not found."
+        )
+
+    update_fields: Dict[str, Any] = {
+        "image_url": payload.image_url,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if payload.alt_text is not None:
+        update_fields["alt_text"] = payload.alt_text
+
+    supabase.table("drafts").update(update_fields).eq("id", draft_id).execute()
+
+    # Record logo confirmation if reviewer verified it
+    if payload.logo_confirmed:
+        supabase.table("decisions").insert({
+            "draft_id": draft_id,
+            "version_no": 1,
+            "role": "reviewer",
+            "decision": "re_review",
+            "comment": "Reviewer confirmed current approved logo file only (A-02). Archived logos not accepted.",
+        }).execute()
+
+    return {"status": "image_attached", "draft_id": draft_id, "image_url": payload.image_url}
+
+@app.get("/api/insights", summary="Real database session counts grouped by citation ID")
+def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID")):
+    supabase = get_supabase()
+
+    # Known canonical citations for zero-count inclusion
+    canonical_citations = [
+        "F-12", "R-04", "A-02", "R-09",
+        "P-01", "P-02", "P-03", "P-04",
+        "T-01", "T-02", "T-03", "T-04"
+    ]
+
+    counts_by_citation: Dict[str, int] = {cid: 0 for cid in canonical_citations}
+    counts_by_lane: Dict[str, int] = {
+        "contradiction": 0,
+        "evidence_needed": 0,
+        "human_decision": 0
+    }
+
+    # Query real findings rows from database
+    query = supabase.table("findings").select("citation_id, lane")
+    if brand_id:
+        # Join filter by draft brand_id if provided
+        drafts_res = supabase.table("drafts").select("id").eq("brand_id", brand_id).execute()
+        draft_ids = [d["id"] for d in (drafts_res.data or [])]
+        if draft_ids:
+            query = query.in_("draft_id", draft_ids)
+        else:
+            return {
+                "total_findings": 0,
+                "counts_by_citation": counts_by_citation,
+                "counts_by_lane": counts_by_lane,
+            }
+
+    findings_res = query.execute()
+    real_findings = findings_res.data or []
+
+    for f in real_findings:
+        cid = f.get("citation_id")
+        if cid:
+            counts_by_citation[cid] = counts_by_citation.get(cid, 0) + 1
+
+        lane = f.get("lane")
+        if lane:
+            counts_by_lane[lane] = counts_by_lane.get(lane, 0) + 1
+
+    return {
+        "total_findings": len(real_findings),
+        "counts_by_citation": counts_by_citation,
+        "counts_by_lane": counts_by_lane,
+    }
+
 
 @app.post("/api/drafts/{draft_id}/apply-fix", summary="Apply suggested fix to draft text")
 def apply_fix(draft_id: str, payload: ApplyFixRequest):

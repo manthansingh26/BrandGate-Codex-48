@@ -8,8 +8,10 @@ import { Vault } from './pages/Vault';
 import { Submit } from './pages/Submit';
 import { Report } from './pages/Report';
 import { Review } from './pages/Review';
+import { Insights } from './pages/Insights';
 
 export const App: React.FC = () => {
+
   const [activeTab, setActiveTab] = useState<string>('home');
   const [apiStatus, setApiStatus] = useState<ApiConnectionStatus>('waking');
   const [userRole, setUserRole] = useState<UserRole>('creator');
@@ -143,9 +145,13 @@ export const App: React.FC = () => {
             onDraftUpdated={handleDraftUpdated}
           />
         )}
+        {activeTab === 'insights' && (
+          <Insights activeBrand={activeBrand} />
+        )}
       </main>
     </div>
   );
 };
+
 
 export default App;

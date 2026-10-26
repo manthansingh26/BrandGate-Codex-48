@@ -98,12 +98,21 @@ Set the required environment variables:
 - `POST /api/drafts/{draft_id}/apply-fix` -> Applies a finding's `suggested_fix`, increments version number, sets status to `draft`, and returns updated text.
 - `POST /api/drafts/{draft_id}/revise` -> Submits revised `body_text` and `alt_text`, creates a new version, and sets status to `draft`.
 
-### Approval Workflow & Decisions (Phase 5)
-- `POST /api/drafts/{draft_id}/request-approval` -> Transitions status from `checked` to `pending_approval`. Logs decision.
-- `POST /api/drafts/{draft_id}/approve` -> Reviewer role only. Enforces creator separation (creator cannot approve their own draft). In guest mode, records decision as `demo_reviewer`. Transitions status to `approved` and returns locked snapshot object.
-- `POST /api/drafts/{draft_id}/request-changes` -> Reviewer role only, requires a non-empty `comment`. Transitions status to `needs_changes`.
-- `POST /api/drafts/{draft_id}/comments` -> Adds a collaboration comment tagged with timestamp, draft version, and role.
-- `GET /api/drafts/{draft_id}` -> Returns draft with full version history, findings, comments, decision log, and `approved_snapshot` (if approved).
+### Image Attachments & Insights (Phase 6)
+- `POST /api/drafts/{draft_id}/image` -> Attaches public `image_url` and `alt_text`. If `logo_confirmed` is true, logs reviewer verification of approved current logo (A-02).
+- `GET /api/insights?brand_id={brand_id}` -> Queries the live database to return actual aggregated counts of findings grouped by canonical citation IDs (`F-12`, `R-04`, `A-02`, `R-09`, `P-01`..`P-04`, `T-01`..`T-04`) and lanes (`contradiction`, `evidence_needed`, `human_decision`). Zero counts are shown as `0` (never hidden or fabricated).
+
+---
+
+## Supabase Storage Setup (Phase 6 Manual Step)
+
+1. Open your Supabase project dashboard at [supabase.com](https://supabase.com).
+2. Go to **Storage** in the left sidebar.
+3. Click **New bucket**.
+4. Name the bucket exactly: `brandgate-creatives`.
+5. Toggle **Public bucket** to **ON** (allows public URL viewing for demo creatives).
+6. Click **Save**.
+
 
 ---
 

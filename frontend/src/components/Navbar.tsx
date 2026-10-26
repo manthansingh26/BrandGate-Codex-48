@@ -136,8 +136,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               Review
             </button>
+            <button
+              onClick={() => setActiveTab('insights')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                activeTab === 'insights'
+                  ? 'bg-zinc-800 text-white'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+              }`}
+            >
+              Insights
+            </button>
           </nav>
         </div>
+
 
         {/* Right Header Elements */}
         <div className="flex items-center gap-3">
