@@ -79,6 +79,15 @@ export interface ApprovedSnapshot {
   vault_version: string;
 }
 
+export interface ReviseDraftResponse {
+  id: string;
+  draft_id: string;
+  version_no: number;
+  body_text: string;
+  alt_text?: string | null;
+  status: DraftStatus;
+}
+
 export interface InsightsData {
   total_findings: number;
   counts_by_citation: Record<string, number>;

@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- BrandGate Database & Storage Hardening Migration (001_storage_and_rls.sql)
--- Instructions: Run manually in the Supabase SQL Editor if upgrading production.
+-- FOR MANUAL REVIEW ONLY — DO NOT EXECUTE DIRECTLY ON PRODUCTION WITHOUT APPROVAL.
 -- ==============================================================================
 
 -- 1. Enable Row Level Security (RLS) on all core tables
@@ -29,15 +29,17 @@ CREATE POLICY "Public read for brandgate-creatives"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'brandgate-creatives');
 
--- Allow authenticated and guest upload to brandgate-creatives
-CREATE POLICY "Allow creative uploads"
+-- Allow uploads to brandgate-creatives strictly with image type and 5MB size limits
+CREATE POLICY "Allow restricted creative uploads"
   ON storage.objects FOR INSERT
   WITH CHECK (
     bucket_id = 'brandgate-creatives'
     AND (storage.foldername(name))[1] != 'private'
+    AND (octet_length(COALESCE(metadata->>'size', '0')::text) < 5242880)
   );
 
 -- Restrict delete operations to service role
 CREATE POLICY "Restrict delete on brandgate-creatives"
   ON storage.objects FOR DELETE
   USING (auth.role() = 'service_role');
+

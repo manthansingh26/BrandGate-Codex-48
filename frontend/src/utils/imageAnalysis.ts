@@ -4,8 +4,10 @@
  */
 
 export interface PaletteAnalysisResult {
+  status: 'analyzed' | 'unavailable';
   isOffPalette: boolean;
   sampledColors: string[];
+  error?: string;
 }
 
 export interface ContrastResult {
@@ -25,6 +27,7 @@ export const APPROVED_BRAND_PALETTE = [
 /**
  * Extracts dominant colors from an image using HTML5 Canvas.
  * Labels: "Approximate" — never claims pixel-perfect detection.
+ * On CORS or load errors, marks status as 'unavailable' rather than claiming pass.
  */
 export async function sampleImageColors(imageUrl: string): Promise<PaletteAnalysisResult> {
   return new Promise((resolve) => {
@@ -37,7 +40,12 @@ export async function sampleImageColors(imageUrl: string): Promise<PaletteAnalys
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-          resolve({ isOffPalette: false, sampledColors: [] });
+          resolve({
+            status: 'unavailable',
+            isOffPalette: false,
+            sampledColors: [],
+            error: 'Canvas 2D context unavailable',
+          });
           return;
         }
 
@@ -70,15 +78,25 @@ export async function sampleImageColors(imageUrl: string): Promise<PaletteAnalys
           });
         });
 
-        resolve({ isOffPalette, sampledColors: sortedColors });
-      } catch (err) {
+        resolve({ status: 'analyzed', isOffPalette, sampledColors: sortedColors });
+      } catch (err: any) {
         // Fallback for tainted canvas or cross-origin issues
-        resolve({ isOffPalette: false, sampledColors: ['#1E3A8A', '#D97706'] });
+        resolve({
+          status: 'unavailable',
+          isOffPalette: false,
+          sampledColors: [],
+          error: 'Image color sampling unavailable due to cross-origin or canvas security restrictions.',
+        });
       }
     };
 
     img.onerror = () => {
-      resolve({ isOffPalette: false, sampledColors: [] });
+      resolve({
+        status: 'unavailable',
+        isOffPalette: false,
+        sampledColors: [],
+        error: 'Failed to load image for color analysis.',
+      });
     };
   });
 }

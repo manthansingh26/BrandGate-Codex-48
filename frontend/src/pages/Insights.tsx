@@ -51,7 +51,7 @@ export const Insights: React.FC<InsightsProps> = ({ activeBrand }) => {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-900 border border-zinc-800 text-teal-400">
-              Session counts
+              Database aggregation
             </span>
             <span className="text-xs text-zinc-500 font-mono">
               Live from PostgreSQL database

@@ -288,7 +288,14 @@ class ApiClient {
     return res.json();
   }
 
-  async reviseDraft(draftId: string, payload: { body_text: string; alt_text?: string | null }): Promise<Draft> {
+  async reviseDraft(draftId: string, payload: { body_text: string; alt_text?: string | null }): Promise<{
+    id: string;
+    draft_id: string;
+    version_no: number;
+    body_text: string;
+    status: string;
+    alt_text?: string | null;
+  }> {
     const res = await fetch(`${this.base}/api/drafts/${draftId}/revise`, {
       method: 'POST',
       headers: this.getHeaders(),

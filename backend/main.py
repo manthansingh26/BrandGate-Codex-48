@@ -1,4 +1,7 @@
 import os
+import re
+import uuid
+import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, status, Query, Request
@@ -23,20 +26,11 @@ from models import (
 from review_engine import run_deterministic_review, apply_fix_to_text
 from llm_review import run_grounded_llm_review
 
+# Configure secure module logger
+logger = logging.getLogger("brandgate.api")
 
-
-
-# Load local environment variables from .env if present (override=True ensures .env values take precedence over shell)
+# Load local environment variables from .env if present (override=True ensures .env values take precedence)
 load_dotenv(override=True)
-
-# Provider-mismatch diagnostic startup log (Safe: prints ONLY set, length, first 5 chars, match boolean)
-_gemini_key = os.environ.get("GEMINI_API_KEY", "")
-_key_set = bool(_gemini_key)
-_key_len = len(_gemini_key)
-_prefix = _gemini_key[:5] if _key_set else ""
-_match_google = _prefix.startswith("AIza")
-print(f"GEMINI_API_KEY loaded: set={_key_set}, length={_key_len}, prefix={_prefix}, provider_match_google={_match_google}")
-
 
 DEMO_BRAND_ID = "00000000-0000-0000-0000-000000000001"
 
@@ -46,9 +40,10 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Configure CORS origins
-frontend_url_env = os.getenv("FRONTEND_URL", "")
-allowed_origins = [
+# ------------------------------------------------------------------------------
+# Strict CORS Origin Configuration (Blocker 5)
+# ------------------------------------------------------------------------------
+ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
@@ -56,32 +51,44 @@ allowed_origins = [
     "https://brand-gate-rho.vercel.app",
 ]
 
+frontend_url_env = os.getenv("FRONTEND_URL", "")
 if frontend_url_env:
     for url in frontend_url_env.split(","):
         clean_url = url.strip()
-        if clean_url and clean_url not in allowed_origins:
-            allowed_origins.append(clean_url)
+        if clean_url and clean_url not in ALLOWED_ORIGINS:
+            ALLOWED_ORIGINS.append(clean_url)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_origin_regex=r"^https://.*\.vercel\.app$",
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"^https://brand-gate-[a-z0-9-]+-.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+def get_safe_cors_origin(request: Request) -> str:
+    """Returns incoming origin only if on allowlist or Vercel preview regex; falls back to production frontend."""
+    origin = request.headers.get("origin")
+    if not origin:
+        return ALLOWED_ORIGINS[0]
+    if origin in ALLOWED_ORIGINS:
+        return origin
+    if re.match(r"^https://brand-gate-[a-z0-9-]+-.*\.vercel\.app$", origin):
+        return origin
+    return "https://brand-gate-rho.vercel.app"
+
 # ------------------------------------------------------------------------------
-# Explicit CORS-Guaranteed Exception Handlers (Never leak stack traces or drop CORS)
+# Explicit CORS-Guaranteed Exception Handlers (Blocker 4 & 5)
 # ------------------------------------------------------------------------------
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    origin = request.headers.get("origin") or "http://localhost:5173"
+    safe_origin = get_safe_cors_origin(request)
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
         headers={
-            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Origin": safe_origin,
             "Access-Control-Allow-Credentials": "true",
             "Access-Control-Allow-Methods": "*",
             "Access-Control-Allow-Headers": "*",
@@ -90,15 +97,17 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    import uuid
     request_id = str(uuid.uuid4())
-    origin = request.headers.get("origin") or "http://localhost:5173"
-    logger.error(f"[REQ-{request_id}] Unhandled server exception at {request.url.path}: {exc}", exc_info=True)
+    safe_origin = get_safe_cors_origin(request)
+    try:
+        logger.error(f"[REQ-{request_id}] Unhandled server exception at {request.url.path}: {exc}", exc_info=True)
+    except Exception:
+        pass
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "Internal server error", "request_id": request_id},
         headers={
-            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Origin": safe_origin,
             "Access-Control-Allow-Credentials": "true",
             "Access-Control-Allow-Methods": "*",
             "Access-Control-Allow-Headers": "*",
@@ -130,7 +139,7 @@ def health_check() -> Dict[str, str]:
 
 
 # ------------------------------------------------------------------------------
-# Helper Functions
+# Server-Side Authorization & Tenant Isolation Helpers (Blocker 1)
 # ------------------------------------------------------------------------------
 def verify_brand_exists(supabase, brand_id: str):
     res = supabase.table("brands").select("id, name").eq("id", brand_id).execute()
@@ -141,20 +150,86 @@ def verify_brand_exists(supabase, brand_id: str):
         )
     return res.data[0]
 
-# ------------------------------------------------------------------------------
-# Brands API
-# ------------------------------------------------------------------------------
-@app.get("/api/brands", summary="List all brands")
-def list_brands():
-    supabase = get_supabase()
-    res = supabase.table("brands").select("*").order("name").execute()
-    return res.data
+def check_brand_access(user: Optional[Dict[str, Any]], brand_id: str, write: bool = False):
+    """
+    Enforces server-side brand authorization:
+    - Guests are strictly limited to DEMO_BRAND_ID.
+    - Demo brand vault is read-only for guests (write=True raises 403).
+    - If brand_id is not DEMO_BRAND_ID and caller is unauthenticated, raises 403.
+    """
+    if not user:
+        if brand_id != DEMO_BRAND_ID:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Guest operations are restricted strictly to the seeded demo brand."
+            )
+        if write:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Demo brand vault is read-only for guests. Please sign in to manage brand vaults."
+            )
+
+def verify_draft_access(supabase, draft_id: str, user: Optional[Dict[str, Any]], required_role: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Fetches draft and verifies caller has legitimate tenant / role access:
+    - Guests can ONLY access drafts belonging to DEMO_BRAND_ID.
+    - If user is present, verifies role matches required_role (if specified).
+    """
+    draft_res = supabase.table("drafts").select("*").eq("id", draft_id).execute()
+    if not draft_res.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Draft '{draft_id}' not found."
+        )
+    draft = draft_res.data[0]
+    brand_id = draft.get("brand_id")
+
+    if not user:
+        if brand_id != DEMO_BRAND_ID:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Guest access is restricted strictly to seeded demo brand drafts."
+            )
+    else:
+        if brand_id != DEMO_BRAND_ID:
+            if user.get("role") != "reviewer" and draft.get("created_by_user_id") != user.get("id"):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: You do not have permission to view or modify this draft."
+                )
+
+    if required_role and user and user.get("role") != required_role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Operation requires '{required_role}' role."
+        )
+
+    return draft
 
 # ------------------------------------------------------------------------------
-# Vault Items API
+# Brands API (Blocker 1)
+# ------------------------------------------------------------------------------
+@app.get("/api/brands", summary="List all brands")
+def list_brands(request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+    supabase = get_supabase()
+    res = supabase.table("brands").select("*").order("name").execute()
+    all_brands = res.data or []
+    if not user:
+        # Guests only see the seeded demo brand
+        return [b for b in all_brands if b.get("id") == DEMO_BRAND_ID]
+    return all_brands
+
+# ------------------------------------------------------------------------------
+# Vault Items API (Blocker 1)
 # ------------------------------------------------------------------------------
 @app.get("/api/brands/{brand_id}/vault", summary="List vault items grouped by kind")
-def get_brand_vault(brand_id: str):
+def get_brand_vault(brand_id: str, request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+    check_brand_access(user, brand_id, write=False)
+
     supabase = get_supabase()
     verify_brand_exists(supabase, brand_id)
 
@@ -180,11 +255,7 @@ def get_brand_vault(brand_id: str):
 def create_vault_item(brand_id: str, item: VaultItemCreate, request: Request = None):
     auth_header = request.headers.get("Authorization") if request else None
     user = get_authenticated_user(auth_header)
-    if not user and brand_id != DEMO_BRAND_ID:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Guest vault creation is restricted to the seeded demo brand."
-        )
+    check_brand_access(user, brand_id, write=True)
 
     supabase = get_supabase()
     verify_brand_exists(supabase, brand_id)
@@ -215,11 +286,7 @@ def create_vault_item(brand_id: str, item: VaultItemCreate, request: Request = N
 def update_vault_item(brand_id: str, item_id: str, payload: VaultItemUpdate, request: Request = None):
     auth_header = request.headers.get("Authorization") if request else None
     user = get_authenticated_user(auth_header)
-    if not user and brand_id != DEMO_BRAND_ID:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Guest vault edits are restricted to the seeded demo brand."
-        )
+    check_brand_access(user, brand_id, write=True)
 
     supabase = get_supabase()
     verify_brand_exists(supabase, brand_id)
@@ -249,11 +316,7 @@ def update_vault_item(brand_id: str, item_id: str, payload: VaultItemUpdate, req
 def delete_vault_item(brand_id: str, item_id: str, request: Request = None):
     auth_header = request.headers.get("Authorization") if request else None
     user = get_authenticated_user(auth_header)
-    if not user and brand_id != DEMO_BRAND_ID:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Guest vault deletion is restricted to the seeded demo brand."
-        )
+    check_brand_access(user, brand_id, write=True)
 
     supabase = get_supabase()
     verify_brand_exists(supabase, brand_id)
@@ -271,13 +334,11 @@ def delete_vault_item(brand_id: str, item_id: str, request: Request = None):
 
 @app.post("/api/brands/{brand_id}/vault/reset-demo", summary="Restore seeded demo vault items")
 def reset_demo_vault(brand_id: str, request: Request = None):
-    # Enforce guest demo scoping: only the demo brand can be reset by guest
-    auth_header = request.headers.get("Authorization") if request else None
-    user = get_authenticated_user(auth_header)
-    if not user and brand_id != DEMO_BRAND_ID:
+    # Enforce guest demo scoping: only the demo brand can be reset
+    if brand_id != DEMO_BRAND_ID:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Guest demo reset is restricted to the seeded demo brand."
+            detail="Reset operation is permitted strictly for the seeded demo brand."
         )
 
     supabase = get_supabase()
@@ -391,16 +452,18 @@ def reset_demo_vault(brand_id: str, request: Request = None):
     return {"status": "reset", "restored_count": len(res.data)}
 
 # ------------------------------------------------------------------------------
-# Drafts API
+# Drafts API (Blocker 1 & 2)
 # ------------------------------------------------------------------------------
 @app.post("/api/drafts", summary="Create a draft and version 1", status_code=status.HTTP_201_CREATED)
 def create_draft(payload: DraftCreate, request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+    check_brand_access(user, payload.brand_id, write=False)
+
     supabase = get_supabase()
     verify_brand_exists(supabase, payload.brand_id)
 
-    auth_header = request.headers.get("Authorization") if request else None
-    user = get_authenticated_user(auth_header)
-    creator_role = user["role"] if user else payload.created_by_role
+    creator_role = user["role"] if user else "guest"
 
     # 1. Insert parent draft record
     draft_record = {
@@ -419,7 +482,6 @@ def create_draft(payload: DraftCreate, request: Request = None):
     try:
         draft_res = supabase.table("drafts").insert(draft_record).execute()
     except Exception as exc:
-        # Fallback if created_by_user_id is missing or triggers schema conflict
         if "created_by_user_id" in draft_record:
             draft_record.pop("created_by_user_id", None)
             draft_res = supabase.table("drafts").insert(draft_record).execute()
@@ -428,7 +490,6 @@ def create_draft(payload: DraftCreate, request: Request = None):
 
     if not draft_res.data:
         raise HTTPException(status_code=500, detail="Failed to create draft.")
-
 
     created_draft = draft_res.data[0]
     draft_id = created_draft["id"]
@@ -446,19 +507,15 @@ def create_draft(payload: DraftCreate, request: Request = None):
     return created_draft
 
 @app.get("/api/drafts/{draft_id}", summary="Get draft with all versions, findings, comments, decisions")
-def get_draft(draft_id: str):
+def get_draft(draft_id: str, request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
     supabase = get_supabase()
 
-    # 1. Fetch draft
-    draft_res = supabase.table("drafts").select("*").eq("id", draft_id).execute()
-    if not draft_res.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Draft '{draft_id}' not found."
-        )
-    draft = draft_res.data[0]
+    # Tenant isolation & ownership check
+    draft = verify_draft_access(supabase, draft_id, user)
 
-    # 2. Fetch versions, findings, comments, decisions in parallel queries
+    # Fetch versions, findings, comments, decisions
     versions_res = supabase.table("draft_versions").select("*").eq("draft_id", draft_id).order("version_no").execute()
     findings_res = supabase.table("findings").select("*").eq("draft_id", draft_id).order("created_at").execute()
     comments_res = supabase.table("comments").select("*").eq("draft_id", draft_id).order("created_at").execute()
@@ -489,36 +546,40 @@ def get_draft(draft_id: str):
 
     return draft
 
-
 @app.get("/api/drafts", summary="List drafts for a brand (newest first)")
-def list_drafts(brand_id: Optional[str] = Query(None, description="Filter drafts by brand UUID")):
+def list_drafts(brand_id: Optional[str] = Query(None, description="Filter drafts by brand UUID"), request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
     supabase = get_supabase()
 
+    target_brand = brand_id
+    if not user:
+        # Guests can only list drafts for the demo brand
+        target_brand = DEMO_BRAND_ID
+    elif target_brand:
+        check_brand_access(user, target_brand, write=False)
+
     query = supabase.table("drafts").select("*")
-    if brand_id:
-        verify_brand_exists(supabase, brand_id)
-        query = query.eq("brand_id", brand_id)
+    if target_brand:
+        verify_brand_exists(supabase, target_brand)
+        query = query.eq("brand_id", target_brand)
 
     res = query.order("created_at", desc=True).execute()
     return res.data
 
 # ------------------------------------------------------------------------------
-# Review Engine & Revision Endpoints (Phase 3)
+# Review Engine & Revision Endpoints (Phase 3 & Blocker 1, 2, 3)
 # ------------------------------------------------------------------------------
 @app.post("/api/drafts/{draft_id}/review", summary="Run deterministic server-side brand review")
-def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None):
+def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
     supabase = get_supabase()
 
-    # 1. Fetch draft
-    draft_res = supabase.table("drafts").select("*").eq("id", draft_id).execute()
-    if not draft_res.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Draft '{draft_id}' not found."
-        )
-    draft = draft_res.data[0]
+    # Tenant isolation & authorization check
+    draft = verify_draft_access(supabase, draft_id, user)
 
-    # 2. Fetch ACTIVE vault items only for the draft's brand (archived items strictly excluded)
+    # Fetch ACTIVE vault items only for the draft's brand (archived items strictly excluded)
     vault_res = (
         supabase.table("vault_items")
         .select("*")
@@ -528,7 +589,7 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None):
     )
     active_vault_items = vault_res.data or []
 
-    # 3. Run deterministic checks with citation validation
+    # Run deterministic checks with citation validation
     logo_confirmed = payload.logo_confirmed if payload else False
     palette_off = payload.palette_off if payload else False
     contrast_ratio = payload.contrast_ratio if payload else None
@@ -545,10 +606,10 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None):
 
     current_version = draft.get("current_version", 1)
 
-    # 4. Clear any previous findings for this version to allow clean re-reviews
+    # Clear previous findings for this version to allow clean re-reviews
     supabase.table("findings").delete().eq("draft_id", draft_id).eq("version_no", current_version).execute()
 
-    # 5. Save validated findings to database
+    # Save validated findings to database
     saved_findings = []
     if validated_findings:
         findings_to_insert = [
@@ -566,12 +627,12 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None):
         insert_res = supabase.table("findings").insert(findings_to_insert).execute()
         saved_findings = insert_res.data or []
 
-    # 6. Update draft status to "checked"
+    # Update draft status to "checked"
     supabase.table("drafts").update({
         "status": "checked"
     }).eq("id", draft_id).execute()
 
-    # 7. Run Grounded LLM Review (Addition to deterministic review, strictly isolated)
+    # Run Grounded LLM Review (Addition to deterministic review, strictly isolated)
     llm_result = run_grounded_llm_review(
         body_text=draft.get("body_text", ""),
         alt_text=draft.get("alt_text"),
@@ -581,25 +642,20 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None):
         timeout_seconds=60.0
     )
 
-
     return {
         "deterministic_findings": saved_findings,
         "llm_review": llm_result,
         "findings": saved_findings
     }
 
-
 @app.post("/api/drafts/{draft_id}/image", summary="Attach image URL and alt text to draft")
-def attach_image(draft_id: str, payload: AttachImageRequest):
+def attach_image(draft_id: str, payload: AttachImageRequest, request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
     supabase = get_supabase()
 
-    draft_res = supabase.table("drafts").select("*").eq("id", draft_id).execute()
-    if not draft_res.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Draft '{draft_id}' not found."
-        )
-    draft = draft_res.data[0]
+    # Tenant isolation & authorization check
+    draft = verify_draft_access(supabase, draft_id, user)
 
     current_ver = draft.get("current_version", 1)
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -610,7 +666,6 @@ def attach_image(draft_id: str, payload: AttachImageRequest):
         new_version_no = current_ver + 1
         new_alt = payload.alt_text if payload.alt_text is not None else draft.get("alt_text")
 
-        # Record new version in draft_versions
         supabase.table("draft_versions").insert({
             "draft_id": draft_id,
             "version_no": new_version_no,
@@ -618,7 +673,6 @@ def attach_image(draft_id: str, payload: AttachImageRequest):
             "alt_text": new_alt,
         }).execute()
 
-        # Reset draft status to draft
         supabase.table("drafts").update({
             "image_url": payload.image_url,
             "alt_text": new_alt,
@@ -638,24 +692,29 @@ def attach_image(draft_id: str, payload: AttachImageRequest):
 
         supabase.table("drafts").update(update_fields).eq("id", draft_id).execute()
 
-    # Record logo confirmation against the actual current version
     if payload.logo_confirmed:
         supabase.table("decisions").insert({
             "draft_id": draft_id,
             "version_no": current_ver,
-            "role": "reviewer",
+            "role": user["role"] if user else "reviewer",
             "decision": "re_review",
             "comment": "Reviewer confirmed current approved logo file only (A-02). Archived logos not accepted.",
         }).execute()
 
     return {"status": "image_attached", "draft_id": draft_id, "image_url": payload.image_url, "version_no": current_ver}
 
-
 @app.get("/api/insights", summary="Real database session counts grouped by citation ID")
-def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID")):
+def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID"), request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+    target_brand = brand_id
+    if not user:
+        target_brand = DEMO_BRAND_ID
+    elif target_brand:
+        check_brand_access(user, target_brand, write=False)
+
     supabase = get_supabase()
 
-    # Known canonical citations for zero-count inclusion
     canonical_citations = [
         "F-12", "R-04", "A-02", "R-09",
         "P-01", "P-02", "P-03", "P-04",
@@ -669,11 +728,9 @@ def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID")
         "human_decision": 0
     }
 
-    # Query real findings rows from database
     query = supabase.table("findings").select("citation_id, lane")
-    if brand_id:
-        # Join filter by draft brand_id if provided
-        drafts_res = supabase.table("drafts").select("id").eq("brand_id", brand_id).execute()
+    if target_brand:
+        drafts_res = supabase.table("drafts").select("id").eq("brand_id", target_brand).execute()
         draft_ids = [d["id"] for d in (drafts_res.data or [])]
         if draft_ids:
             query = query.in_("draft_id", draft_ids)
@@ -702,21 +759,14 @@ def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID")
         "counts_by_lane": counts_by_lane,
     }
 
-
 @app.post("/api/drafts/{draft_id}/apply-fix", summary="Apply suggested fix to draft text")
-def apply_fix(draft_id: str, payload: ApplyFixRequest):
+def apply_fix(draft_id: str, payload: ApplyFixRequest, request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
     supabase = get_supabase()
 
-    # 1. Fetch draft
-    draft_res = supabase.table("drafts").select("*").eq("id", draft_id).execute()
-    if not draft_res.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Draft '{draft_id}' not found."
-        )
-    draft = draft_res.data[0]
+    draft = verify_draft_access(supabase, draft_id, user)
 
-    # 2. Fetch finding
     finding_res = supabase.table("findings").select("*").eq("id", payload.finding_id).execute()
     if not finding_res.data:
         raise HTTPException(
@@ -737,11 +787,9 @@ def apply_fix(draft_id: str, payload: ApplyFixRequest):
             detail="This finding has no automated suggested_fix."
         )
 
-    # 3. Apply the fix to body_text
     current_body = draft.get("body_text", "")
     new_body = apply_fix_to_text(current_body, finding)
 
-    # 4. Create new version
     new_version_no = draft.get("current_version", 1) + 1
     version_record = {
         "draft_id": draft_id,
@@ -751,7 +799,6 @@ def apply_fix(draft_id: str, payload: ApplyFixRequest):
     }
     supabase.table("draft_versions").insert(version_record).execute()
 
-    # 5. Update draft with new version and reset status to "draft"
     supabase.table("drafts").update({
         "body_text": new_body,
         "current_version": new_version_no,
@@ -760,6 +807,7 @@ def apply_fix(draft_id: str, payload: ApplyFixRequest):
     }).eq("id", draft_id).execute()
 
     return {
+        "id": draft_id,
         "draft_id": draft_id,
         "version_no": new_version_no,
         "body_text": new_body,
@@ -767,19 +815,13 @@ def apply_fix(draft_id: str, payload: ApplyFixRequest):
     }
 
 @app.post("/api/drafts/{draft_id}/revise", summary="Submit a revised draft version")
-def revise_draft(draft_id: str, payload: ReviseDraftRequest):
+def revise_draft(draft_id: str, payload: ReviseDraftRequest, request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
     supabase = get_supabase()
 
-    # 1. Fetch draft
-    draft_res = supabase.table("drafts").select("*").eq("id", draft_id).execute()
-    if not draft_res.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Draft '{draft_id}' not found."
-        )
-    draft = draft_res.data[0]
+    draft = verify_draft_access(supabase, draft_id, user)
 
-    # 2. Create new version
     new_version_no = draft.get("current_version", 1) + 1
     version_record = {
         "draft_id": draft_id,
@@ -789,7 +831,6 @@ def revise_draft(draft_id: str, payload: ReviseDraftRequest):
     }
     supabase.table("draft_versions").insert(version_record).execute()
 
-    # 3. Update draft and explicitly reset status to draft (clearing any approval)
     update_data = {
         "body_text": payload.body_text,
         "current_version": new_version_no,
@@ -801,7 +842,9 @@ def revise_draft(draft_id: str, payload: ReviseDraftRequest):
 
     supabase.table("drafts").update(update_data).eq("id", draft_id).execute()
 
+    # Return normalized response containing both 'id' and 'draft_id' (Blocker 2)
     return {
+        "id": draft_id,
         "draft_id": draft_id,
         "version_no": new_version_no,
         "body_text": payload.body_text,
@@ -810,38 +853,30 @@ def revise_draft(draft_id: str, payload: ReviseDraftRequest):
     }
 
 # ------------------------------------------------------------------------------
-# Approval Workflow & Decisions Endpoints (Phase 5)
+# Approval Workflow & Decisions Endpoints (Blocker 1 & 6)
 # ------------------------------------------------------------------------------
 @app.post("/api/drafts/{draft_id}/request-approval", summary="Request approval from checked state")
 def request_approval(draft_id: str, payload: RequestApprovalRequest, request: Request = None):
-    supabase = get_supabase()
     auth_header = request.headers.get("Authorization") if request else None
     user = get_authenticated_user(auth_header)
+    supabase = get_supabase()
 
-    # 1. Fetch draft
-    draft_res = supabase.table("drafts").select("*").eq("id", draft_id).execute()
-    if not draft_res.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Draft '{draft_id}' not found."
-        )
-    draft = draft_res.data[0]
+    draft = verify_draft_access(supabase, draft_id, user)
 
-    # Server-side state machine check: must be in "checked" status
+    # Server-side state machine check: must be in "checked" or "needs_changes" status
     if draft.get("status") not in ["checked", "needs_changes"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Draft must be in 'checked' status to request approval. Current status is '{draft.get('status')}'."
+            detail=f"Draft must be in 'checked' or 'needs_changes' status to request approval. Current status is '{draft.get('status')}'."
         )
 
-    # 2. Advance status to pending_approval
+    now_iso = datetime.now(timezone.utc).isoformat()
     supabase.table("drafts").update({
         "status": "pending_approval",
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": now_iso,
     }).eq("id", draft_id).execute()
 
-    # 3. Record decision log entry
-    role_to_log = user["role"] if user else (payload.role or "creator")
+    role_to_log = user["role"] if user else "creator"
     supabase.table("decisions").insert({
         "draft_id": draft_id,
         "version_no": draft.get("current_version", 1),
@@ -854,18 +889,11 @@ def request_approval(draft_id: str, payload: RequestApprovalRequest, request: Re
 
 @app.post("/api/drafts/{draft_id}/approve", summary="Approve draft (Reviewer only)")
 def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request = None):
-    supabase = get_supabase()
     auth_header = request.headers.get("Authorization") if request else None
     user = get_authenticated_user(auth_header)
+    supabase = get_supabase()
 
-    # 1. Fetch draft
-    draft_res = supabase.table("drafts").select("*").eq("id", draft_id).execute()
-    if not draft_res.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Draft '{draft_id}' not found."
-        )
-    draft = draft_res.data[0]
+    draft = verify_draft_access(supabase, draft_id, user)
 
     # State machine check
     if draft.get("status") != "pending_approval":
@@ -874,28 +902,37 @@ def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request 
             detail=f"Draft must be in 'pending_approval' status to approve. Current status is '{draft.get('status')}'."
         )
 
-    # Authorization & Creator separation rule
+    # Separation of creator / reviewer & role enforcement (Blocker 6)
     if user:
-        # If real account created this draft, they cannot approve it
+        if user.get("role") != "reviewer":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only accounts with the 'reviewer' role can approve drafts."
+            )
         created_by_user = draft.get("created_by_user_id")
         if created_by_user and created_by_user == user["id"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Creator cannot approve their own draft."
             )
-        approver_role = user.get("role", "reviewer")
+        approver_role = "reviewer"
+        approver_id = user["id"]
     else:
-        # Guest users can NEVER approve as a real account — recorded as demo_reviewer
+        # Guests can only approve demo drafts in guest demo mode
+        if draft.get("brand_id") != DEMO_BRAND_ID:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Guest demo approval is restricted strictly to the seeded demo brand."
+            )
         approver_role = "demo_reviewer"
+        approver_id = None
 
-    # 2. Transition status to approved
     now_iso = datetime.now(timezone.utc).isoformat()
     supabase.table("drafts").update({
         "status": "approved",
         "updated_at": now_iso,
     }).eq("id", draft_id).execute()
 
-    # 3. Create locked snapshot
     vault_version_tag = f"vault-{draft['brand_id'][:8]}"
     locked_snapshot = {
         "locked": True,
@@ -903,12 +940,11 @@ def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request 
         "image_reference": draft.get("image_url"),
         "alt_text": draft.get("alt_text"),
         "approver_role": approver_role,
-        "approver_id": user["id"] if user else None,
+        "approver_id": approver_id,
         "timestamp": now_iso,
         "vault_version": vault_version_tag,
     }
 
-    # 4. Record decision log entry
     supabase.table("decisions").insert({
         "draft_id": draft_id,
         "version_no": draft.get("current_version", 1),
@@ -925,29 +961,33 @@ def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request 
 
 @app.post("/api/drafts/{draft_id}/request-changes", summary="Request changes (Reviewer only, requires comment)")
 def request_changes(draft_id: str, payload: RequestChangesRequest, request: Request = None):
-    supabase = get_supabase()
     auth_header = request.headers.get("Authorization") if request else None
     user = get_authenticated_user(auth_header)
+    supabase = get_supabase()
 
-    # 1. Fetch draft
-    draft_res = supabase.table("drafts").select("*").eq("id", draft_id).execute()
-    if not draft_res.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Draft '{draft_id}' not found."
-        )
-    draft = draft_res.data[0]
+    draft = verify_draft_access(supabase, draft_id, user)
 
-    approver_role = user["role"] if user else "demo_reviewer"
+    if user:
+        if user.get("role") != "reviewer":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only accounts with the 'reviewer' role can request changes."
+            )
+        approver_role = "reviewer"
+    else:
+        if draft.get("brand_id") != DEMO_BRAND_ID:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Guest review is restricted strictly to the seeded demo brand."
+            )
+        approver_role = "demo_reviewer"
 
-    # 2. Update status to needs_changes
     now_iso = datetime.now(timezone.utc).isoformat()
     supabase.table("drafts").update({
         "status": "needs_changes",
         "updated_at": now_iso,
     }).eq("id", draft_id).execute()
 
-    # 3. Record decision log with required comment
     supabase.table("decisions").insert({
         "draft_id": draft_id,
         "version_no": draft.get("current_version", 1),
@@ -964,21 +1004,13 @@ def request_changes(draft_id: str, payload: RequestChangesRequest, request: Requ
 
 @app.post("/api/drafts/{draft_id}/comments", summary="Add comment to draft")
 def add_comment(draft_id: str, payload: AddCommentRequest, request: Request = None):
-    supabase = get_supabase()
     auth_header = request.headers.get("Authorization") if request else None
     user = get_authenticated_user(auth_header)
+    supabase = get_supabase()
 
-    # 1. Fetch draft
-    draft_res = supabase.table("drafts").select("id, current_version").eq("id", draft_id).execute()
-    if not draft_res.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Draft '{draft_id}' not found."
-        )
-    draft = draft_res.data[0]
+    draft = verify_draft_access(supabase, draft_id, user)
 
-    author_role = user["role"] if user else (payload.role or "guest")
-
+    author_role = user["role"] if user else "guest"
     comment_record = {
         "draft_id": draft_id,
         "version_no": draft.get("current_version", 1),

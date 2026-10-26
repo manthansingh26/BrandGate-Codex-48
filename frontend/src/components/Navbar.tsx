@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ApiConnectionStatus, UserRole } from '../types';
 import { AuthModal } from './AuthModal';
-import { AlertCircle, RefreshCw, LogIn, LogOut, User } from 'lucide-react';
+import { AlertCircle, RefreshCw, LogIn, LogOut, User, Menu, X } from 'lucide-react';
 
 interface NavbarProps {
   activeTab: string;
@@ -25,6 +25,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRefreshHealth,
 }) => {
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <header className="border-b border-zinc-800 bg-black/90 backdrop-blur-md sticky top-0 z-50">
@@ -39,11 +40,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           </span>
         </div>
         <div className="flex items-center gap-2 text-zinc-400">
-          <span>Demo roles — real accounts are a later improvement</span>
+          <span className="hidden sm:inline">Demo roles — real accounts are a later improvement</span>
           <div className="inline-flex rounded-md border border-zinc-800 p-0.5 bg-zinc-900">
             <button
               onClick={() => setUserRole('creator')}
-              className={`px-2 py-0.5 text-xs rounded transition-colors ${
+              className={`px-2 py-0.5 text-xs rounded transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
                 userRole === 'creator'
                   ? 'bg-teal-500 text-black font-semibold shadow'
                   : 'text-zinc-400 hover:text-white'
@@ -53,7 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
             <button
               onClick={() => setUserRole('reviewer')}
-              className={`px-2 py-0.5 text-xs rounded transition-colors ${
+              className={`px-2 py-0.5 text-xs rounded transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
                 userRole === 'reviewer'
                   ? 'bg-teal-500 text-black font-semibold shadow'
                   : 'text-zinc-400 hover:text-white'
@@ -67,9 +68,22 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Main Navbar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-8">
+        <div className="flex items-center gap-4 sm:gap-8">
+          {/* Mobile menu toggle for 375px screens (Blocker 7) */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none transition-colors"
+            aria-label="Toggle navigation menu"
+            aria-expanded={mobileMenuOpen}
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+
           <div
-            onClick={() => setActiveTab('home')}
+            onClick={() => {
+              setActiveTab('home');
+              setMobileMenuOpen(false);
+            }}
             className="flex items-center gap-2 cursor-pointer group"
           >
             <div className="h-8 w-8 rounded-lg bg-teal-500 flex items-center justify-center text-black font-black text-lg group-hover:scale-105 transition-transform">
@@ -88,9 +102,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           <nav className="hidden md:flex items-center gap-1">
             <button
               onClick={() => setActiveTab('home')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
                 activeTab === 'home'
-                  ? 'bg-zinc-800 text-white'
+                  ? 'bg-zinc-800 text-white font-semibold'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
               }`}
             >
@@ -98,9 +112,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('vault')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
                 activeTab === 'vault'
-                  ? 'bg-zinc-800 text-white'
+                  ? 'bg-zinc-800 text-white font-semibold'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
               }`}
             >
@@ -108,9 +122,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('submit')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
                 activeTab === 'submit'
-                  ? 'bg-zinc-800 text-white'
+                  ? 'bg-zinc-800 text-white font-semibold'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
               }`}
             >
@@ -118,9 +132,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('report')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
                 activeTab === 'report'
-                  ? 'bg-zinc-800 text-white'
+                  ? 'bg-zinc-800 text-white font-semibold'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
               }`}
             >
@@ -128,9 +142,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('review')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
                 activeTab === 'review'
-                  ? 'bg-zinc-800 text-white'
+                  ? 'bg-zinc-800 text-white font-semibold'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
               }`}
             >
@@ -138,9 +152,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('insights')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
                 activeTab === 'insights'
-                  ? 'bg-zinc-800 text-white'
+                  ? 'bg-zinc-800 text-white font-semibold'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
               }`}
             >
@@ -228,6 +242,35 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </div>
       </div>
+
+      {/* Mobile Navigation Drawer (Blocker 7 for 375px screens) */}
+      {mobileMenuOpen && (
+        <div className="md:hidden border-b border-zinc-800 bg-black/95 px-4 pt-2 pb-4 space-y-1">
+          {[
+            { id: 'home', label: 'Home' },
+            { id: 'vault', label: 'Brand Vault' },
+            { id: 'submit', label: 'Submit' },
+            { id: 'report', label: 'Report' },
+            { id: 'review', label: 'Review' },
+            { id: 'insights', label: 'Insights' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => {
+                setActiveTab(item.id);
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
+                activeTab === item.id
+                  ? 'bg-zinc-800 text-teal-400 font-semibold'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <AuthModal
         isOpen={authModalOpen}

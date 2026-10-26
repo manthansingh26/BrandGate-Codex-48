@@ -34,6 +34,18 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
     if (!file) return;
 
     setError(null);
+
+    // Validate image format and file size (<= 5MB) (Blocker 3)
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setError('Invalid image format. Allowed formats: PNG, JPEG, WebP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image file exceeds the 5MB size limit. Please upload an image under 5MB.');
+      return;
+    }
+
     setUploading(true);
 
     try {
@@ -91,6 +103,9 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
       let draftId = currentDraft?.id;
 
       if (apiStatus === 'connected') {
+        // Do not persist temporary local blob: URLs as durable public assets on server
+        const durableImageUrl = imagePreview && !imagePreview.startsWith('blob:') ? imagePreview : null;
+
         // If draft hasn't been created yet, create it
         if (!draftId) {
           const created = await api.createDraft({
@@ -98,32 +113,42 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
             title,
             body_text: bodyText,
             alt_text: altText || null,
-            image_url: imagePreview,
+            image_url: durableImageUrl,
           });
           draftId = created.id;
         } else if (
           bodyText !== currentDraft?.body_text ||
           altText !== (currentDraft?.alt_text || '')
         ) {
-          // CRITICAL PERSISTENCE FIX: Save latest editor text before review executes
+          // CRITICAL PERSISTENCE FIX: Save latest editor text before review executes (Blocker 2)
           const revised = await api.reviseDraft(draftId, {
             body_text: bodyText,
             alt_text: altText || null,
           });
-          draftId = revised.id;
+          // Retain valid server draft ID whether returned as id or draft_id
+          draftId = revised.id || (revised as any).draft_id || draftId;
         }
 
-        // Attach image metadata if image is present
-        if (imagePreview) {
+        // Guarantee draft ID is non-null before review and image operations (Blocker 2)
+        if (!draftId) {
+          throw new Error('Failed to resolve draft ID for review.');
+        }
+
+        // Attach image metadata if durable image URL is present
+        if (durableImageUrl) {
           await api.attachImage(draftId, {
-            image_url: imagePreview,
+            image_url: durableImageUrl,
             alt_text: altText || null,
             logo_confirmed: logoConfirmed,
           });
         }
 
-        // Run server-side review with image checks
-        const reviewRes = await api.reviewDraft(draftId);
+        // Run server-side review with image checks wired (Blocker 3)
+        const reviewRes = await api.reviewDraft(draftId, {
+          logo_confirmed: logoConfirmed,
+          palette_off: isOffPalette,
+          contrast_ratio: contrastResult ? contrastResult.ratio : undefined,
+        });
         const updatedDraft = await api.getDraft(draftId);
         onReviewCompleted(updatedDraft, reviewRes.findings, reviewRes.llm_review);
       } else {

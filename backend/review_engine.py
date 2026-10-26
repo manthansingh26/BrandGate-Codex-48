@@ -212,6 +212,20 @@ def run_deterministic_review(
             "suggested_fix": None
         })
 
+    # --------------------------------------------------------------------------
+    # 8. Visual Contrast Ratio Check (Cited R-09) (Blocker 3)
+    # --------------------------------------------------------------------------
+    if contrast_ratio is not None and contrast_ratio < 4.5:
+        r09_rule = next((item for item in rules if item.get("item_id") == "R-09"), None)
+        if r09_rule:
+            raw_findings.append({
+                "lane": "human_decision",
+                "severity": "medium",
+                "citation_id": "R-09",
+                "explanation": f"Visual text-to-background contrast ratio ({contrast_ratio}:1) fails WCAG AA standard (4.5:1 minimum). Review creative background against text color under accessibility rule R-09.",
+                "suggested_fix": None
+            })
+
     # Apply the Mandatory Citation Validator
     return validate_citations(raw_findings, active_items)
 

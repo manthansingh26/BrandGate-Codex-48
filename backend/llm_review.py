@@ -268,17 +268,9 @@ def call_gemini_review(
                 p.get("text", "") for p in parts if isinstance(p, dict) and "text" in p
             )
 
-            # DIAGNOSTIC STEP 1: Log exact candidate facts, first 500 chars, and exact json.loads error
+            # Safe candidate facts logging (Never logs raw text or prompt fragments)
             finish_reason = candidates[0].get("finishReason", "UNKNOWN")
-            print(f"[GEMINI_DEBUG] candidates present? Yes | parts count: {len(parts)} | total length: {len(raw_text)} | finish_reason: {finish_reason}")
-            print(f"[GEMINI_DEBUG] first 500 chars of raw output:\n{repr(raw_text[:500])}")
-
-            # Try raw json.loads to capture exact exception
-            try:
-                json.loads(raw_text)
-                print("[GEMINI_DEBUG] raw json.loads: SUCCESS")
-            except Exception as direct_json_err:
-                print(f"[GEMINI_DEBUG] exact json.loads error: {type(direct_json_err).__name__}: {direct_json_err}")
+            logger.info(f"Gemini candidates received: parts={len(parts)}, total_chars={len(raw_text)}, finish_reason={finish_reason}")
 
             try:
                 validated_findings = parse_gemini_response(raw_text, retrieved_items)
@@ -292,7 +284,7 @@ def call_gemini_review(
                     "findings": validated_findings
                 }
             except Exception as parse_err:
-                print(f"[GEMINI_PARSE_FAILED] Error: {parse_err} | First 200 chars: {repr(raw_text[:200])}")
+                logger.warning(f"Gemini JSON parsing failure: {type(parse_err).__name__}")
                 return {
                     "available": False,
                     "status": "LLM review unavailable",
