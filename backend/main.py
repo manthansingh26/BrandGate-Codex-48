@@ -38,6 +38,8 @@ _match_google = _prefix.startswith("AIza")
 print(f"GEMINI_API_KEY loaded: set={_key_set}, length={_key_len}, prefix={_prefix}, provider_match_google={_match_google}")
 
 
+DEMO_BRAND_ID = "00000000-0000-0000-0000-000000000001"
+
 app = FastAPI(
     title="BrandGate API",
     description="Pre-publication brand-governance gate backend API",
@@ -51,6 +53,7 @@ allowed_origins = [
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://brand-gate-rho.vercel.app",
 ]
 
 if frontend_url_env:
@@ -62,14 +65,14 @@ if frontend_url_env:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=r"^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ------------------------------------------------------------------------------
-# Explicit CORS-Guaranteed Exception Handlers (Never drop CORS on 4xx/5xx)
+# Explicit CORS-Guaranteed Exception Handlers (Never leak stack traces or drop CORS)
 # ------------------------------------------------------------------------------
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
@@ -87,10 +90,13 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    import uuid
+    request_id = str(uuid.uuid4())
     origin = request.headers.get("origin") or "http://localhost:5173"
+    logger.error(f"[REQ-{request_id}] Unhandled server exception at {request.url.path}: {exc}", exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": f"Internal server error: {str(exc)}"},
+        content={"detail": "Internal server error", "request_id": request_id},
         headers={
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Credentials": "true",
@@ -101,11 +107,27 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ------------------------------------------------------------------------------
-# Health Check Endpoint
+# Service Metadata & Health Endpoints
 # ------------------------------------------------------------------------------
+@app.get("/", summary="Service metadata endpoint")
+def root_endpoint() -> Dict[str, Any]:
+    return {
+        "service": "BrandGate API",
+        "version": "1.0.0",
+        "status": "ok",
+        "health": "/health",
+        "endpoints": {
+            "health": "/health",
+            "brands": "/api/brands",
+            "drafts": "/api/drafts",
+            "insights": "/api/insights"
+        }
+    }
+
 @app.get("/health", summary="Health check endpoint")
 def health_check() -> Dict[str, str]:
     return {"status": "ok"}
+
 
 # ------------------------------------------------------------------------------
 # Helper Functions
@@ -155,15 +177,23 @@ def get_brand_vault(brand_id: str):
     return grouped
 
 @app.post("/api/brands/{brand_id}/vault", summary="Create a vault item", status_code=status.HTTP_201_CREATED)
-def create_vault_item(brand_id: str, item: VaultItemCreate):
+def create_vault_item(brand_id: str, item: VaultItemCreate, request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+    if not user and brand_id != DEMO_BRAND_ID:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guest vault creation is restricted to the seeded demo brand."
+        )
+
     supabase = get_supabase()
     verify_brand_exists(supabase, brand_id)
 
-    # Check duplicate (brand_id, item_id)
+    # Check duplicate (brand_id, item_id) -> Return 409 Conflict
     existing = supabase.table("vault_items").select("id").eq("brand_id", brand_id).eq("item_id", item.item_id).execute()
     if existing.data:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_409_CONFLICT,
             detail=f"Vault item with item_id '{item.item_id}' already exists for this brand."
         )
 
@@ -182,7 +212,15 @@ def create_vault_item(brand_id: str, item: VaultItemCreate):
     return res.data[0]
 
 @app.patch("/api/brands/{brand_id}/vault/{item_id}", summary="Edit a vault item")
-def update_vault_item(brand_id: str, item_id: str, payload: VaultItemUpdate):
+def update_vault_item(brand_id: str, item_id: str, payload: VaultItemUpdate, request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+    if not user and brand_id != DEMO_BRAND_ID:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guest vault edits are restricted to the seeded demo brand."
+        )
+
     supabase = get_supabase()
     verify_brand_exists(supabase, brand_id)
 
@@ -208,7 +246,15 @@ def update_vault_item(brand_id: str, item_id: str, payload: VaultItemUpdate):
     return res.data[0]
 
 @app.delete("/api/brands/{brand_id}/vault/{item_id}", summary="Delete a vault item")
-def delete_vault_item(brand_id: str, item_id: str):
+def delete_vault_item(brand_id: str, item_id: str, request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+    if not user and brand_id != DEMO_BRAND_ID:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guest vault deletion is restricted to the seeded demo brand."
+        )
+
     supabase = get_supabase()
     verify_brand_exists(supabase, brand_id)
 
@@ -222,10 +268,21 @@ def delete_vault_item(brand_id: str, item_id: str):
     supabase.table("vault_items").delete().eq("brand_id", brand_id).eq("item_id", item_id).execute()
     return {"status": "deleted", "item_id": item_id}
 
+
 @app.post("/api/brands/{brand_id}/vault/reset-demo", summary="Restore seeded demo vault items")
-def reset_demo_vault(brand_id: str):
+def reset_demo_vault(brand_id: str, request: Request = None):
+    # Enforce guest demo scoping: only the demo brand can be reset by guest
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+    if not user and brand_id != DEMO_BRAND_ID:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guest demo reset is restricted to the seeded demo brand."
+        )
+
     supabase = get_supabase()
     verify_brand_exists(supabase, brand_id)
+
 
     # 1. Clear existing items for this brand
     supabase.table("vault_items").delete().eq("brand_id", brand_id).execute()
@@ -536,33 +593,63 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None):
 def attach_image(draft_id: str, payload: AttachImageRequest):
     supabase = get_supabase()
 
-    draft_res = supabase.table("drafts").select("id").eq("id", draft_id).execute()
+    draft_res = supabase.table("drafts").select("*").eq("id", draft_id).execute()
     if not draft_res.data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Draft '{draft_id}' not found."
         )
+    draft = draft_res.data[0]
 
-    update_fields: Dict[str, Any] = {
-        "image_url": payload.image_url,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-    if payload.alt_text is not None:
-        update_fields["alt_text"] = payload.alt_text
+    current_ver = draft.get("current_version", 1)
+    now_iso = datetime.now(timezone.utc).isoformat()
 
-    supabase.table("drafts").update(update_fields).eq("id", draft_id).execute()
+    # If draft was already approved, updating the creative asset MUST create a new version
+    # and reset status to draft server-side (invalidating the approved snapshot)
+    if draft.get("status") == "approved":
+        new_version_no = current_ver + 1
+        new_alt = payload.alt_text if payload.alt_text is not None else draft.get("alt_text")
 
-    # Record logo confirmation if reviewer verified it
+        # Record new version in draft_versions
+        supabase.table("draft_versions").insert({
+            "draft_id": draft_id,
+            "version_no": new_version_no,
+            "body_text": draft.get("body_text", ""),
+            "alt_text": new_alt,
+        }).execute()
+
+        # Reset draft status to draft
+        supabase.table("drafts").update({
+            "image_url": payload.image_url,
+            "alt_text": new_alt,
+            "current_version": new_version_no,
+            "status": "draft",
+            "updated_at": now_iso,
+        }).eq("id", draft_id).execute()
+
+        current_ver = new_version_no
+    else:
+        update_fields: Dict[str, Any] = {
+            "image_url": payload.image_url,
+            "updated_at": now_iso,
+        }
+        if payload.alt_text is not None:
+            update_fields["alt_text"] = payload.alt_text
+
+        supabase.table("drafts").update(update_fields).eq("id", draft_id).execute()
+
+    # Record logo confirmation against the actual current version
     if payload.logo_confirmed:
         supabase.table("decisions").insert({
             "draft_id": draft_id,
-            "version_no": 1,
+            "version_no": current_ver,
             "role": "reviewer",
             "decision": "re_review",
             "comment": "Reviewer confirmed current approved logo file only (A-02). Archived logos not accepted.",
         }).execute()
 
-    return {"status": "image_attached", "draft_id": draft_id, "image_url": payload.image_url}
+    return {"status": "image_attached", "draft_id": draft_id, "image_url": payload.image_url, "version_no": current_ver}
+
 
 @app.get("/api/insights", summary="Real database session counts grouped by citation ID")
 def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID")):

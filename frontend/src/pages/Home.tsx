@@ -100,8 +100,8 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, apiStat
           <div className="text-2xl sm:text-3xl font-black text-white mt-1">
             "No citation, no flag."
           </div>
-          <p className="text-xs text-zinc-500 mt-1 max-w-md">
-            A finding with no valid vault citation ID must NEVER be shown. Every flag is grounded in an approved rule.
+          <p className="text-xs text-zinc-400 mt-1 max-w-md">
+            A finding with no valid vault citation ID must NEVER be shown. Every flag is grounded in an active brand-vault item.
           </p>
         </div>
 

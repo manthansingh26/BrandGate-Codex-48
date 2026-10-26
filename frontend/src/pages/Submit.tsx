@@ -101,6 +101,16 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
             image_url: imagePreview,
           });
           draftId = created.id;
+        } else if (
+          bodyText !== currentDraft?.body_text ||
+          altText !== (currentDraft?.alt_text || '')
+        ) {
+          // CRITICAL PERSISTENCE FIX: Save latest editor text before review executes
+          const revised = await api.reviseDraft(draftId, {
+            body_text: bodyText,
+            alt_text: altText || null,
+          });
+          draftId = revised.id;
         }
 
         // Attach image metadata if image is present
