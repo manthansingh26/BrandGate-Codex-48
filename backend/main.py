@@ -21,11 +21,22 @@ from models import (
     ReviewDraftRequest,
 )
 from review_engine import run_deterministic_review, apply_fix_to_text
+from llm_review import run_grounded_llm_review
 
 
 
-# Load local environment variables from .env if present
-load_dotenv()
+
+# Load local environment variables from .env if present (override=True ensures .env values take precedence over shell)
+load_dotenv(override=True)
+
+# Provider-mismatch diagnostic startup log (Safe: prints ONLY set, length, first 5 chars, match boolean)
+_gemini_key = os.environ.get("GEMINI_API_KEY", "")
+_key_set = bool(_gemini_key)
+_key_len = len(_gemini_key)
+_prefix = _gemini_key[:5] if _key_set else ""
+_match_google = _prefix.startswith("AIza")
+print(f"GEMINI_API_KEY loaded: set={_key_set}, length={_key_len}, prefix={_prefix}, provider_match_google={_match_google}")
+
 
 app = FastAPI(
     title="BrandGate API",
@@ -503,7 +514,23 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None):
         "status": "checked"
     }).eq("id", draft_id).execute()
 
-    return saved_findings
+    # 7. Run Grounded LLM Review (Addition to deterministic review, strictly isolated)
+    llm_result = run_grounded_llm_review(
+        body_text=draft.get("body_text", ""),
+        alt_text=draft.get("alt_text"),
+        image_url=draft.get("image_url"),
+        active_vault_items=active_vault_items,
+        brand_id=draft.get("brand_id"),
+        timeout_seconds=60.0
+    )
+
+
+    return {
+        "deterministic_findings": saved_findings,
+        "llm_review": llm_result,
+        "findings": saved_findings
+    }
+
 
 @app.post("/api/drafts/{draft_id}/image", summary="Attach image URL and alt text to draft")
 def attach_image(draft_id: str, payload: AttachImageRequest):

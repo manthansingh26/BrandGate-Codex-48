@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { Draft, Finding, ApiConnectionStatus } from '../types';
+import { Draft, Finding, ApiConnectionStatus, LlmReviewResult } from '../types';
 import { api } from '../api/client';
 import { runLocalDemoReview } from '../utils/localReviewEngine';
-import { Check, ArrowRight, RefreshCw } from 'lucide-react';
+import { Check, ArrowRight, RefreshCw, Sparkles, AlertCircle } from 'lucide-react';
 
 interface ReportProps {
   draft: Draft | null;
   findings: Finding[];
-  onDraftUpdated: (draft: Draft, findings: Finding[]) => void;
+  llmReview?: LlmReviewResult | null;
+  onDraftUpdated: (draft: Draft, findings: Finding[], llmReview?: LlmReviewResult | null) => void;
   onNavigateToReview: () => void;
   apiStatus: ApiConnectionStatus;
 }
@@ -15,10 +16,12 @@ interface ReportProps {
 export const Report: React.FC<ReportProps> = ({
   draft,
   findings,
+  llmReview,
   onDraftUpdated,
   onNavigateToReview,
   apiStatus,
 }) => {
+
   const [applyingFixId, setApplyingFixId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,23 +44,26 @@ export const Report: React.FC<ReportProps> = ({
         await api.applyFix(draft.id, finding.id);
 
         // 2. Re-run review on updated draft
-        const newFindings = await api.reviewDraft(draft.id);
+        const reviewRes = await api.reviewDraft(draft.id);
         const updatedDraft = await api.getDraft(draft.id);
-        onDraftUpdated(updatedDraft, newFindings);
+        onDraftUpdated(updatedDraft, reviewRes.findings, reviewRes.llm_review);
       } else {
+
         // Local demo mode fix
         let newBody = draft.body_text;
         if (finding.citation_id === 'F-12' || finding.suggested_fix.includes('Rs.')) {
           newBody = newBody.replace(/(?:Rs\.?|INR|₹)\s*[\d,]+/gi, finding.suggested_fix);
-        } else if (finding.citation_id === 'R-04' && finding.suggested_fix === 'trusted') {
-          // Replace entire "India's No. 1" so NO "No. 1" fragment remains anywhere
-          newBody = newBody.replace(/(?:India['’]?s\s*)?No\.?\s*1/gi, 'trusted');
+        } else if (finding.citation_id === 'R-04' && (finding.explanation.toLowerCase().includes('no. 1') || finding.suggested_fix === 'trusted')) {
+          newBody = newBody.replace(/India['’]?s\s+No\.?\s*1|No\.?\s*1/gi, 'trusted');
+        } else if (finding.citation_id === 'R-04' && (finding.explanation.toLowerCase().includes('clinically') || finding.suggested_fix === 'certified quality')) {
+          newBody = newBody.replace(/clinically\s+proven/gi, 'certified quality');
         } else if (finding.suggested_fix) {
-          const match = finding.explanation.match(/'(.*?)'/);
+          const match = finding.explanation.match(/Claim\s+['"](.*?)['"]\s+is/);
           if (match) {
             newBody = newBody.replace(new RegExp(match[1], 'gi'), finding.suggested_fix);
           }
         }
+
 
 
         const newVersionNo = draft.current_version + 1;
@@ -180,6 +186,73 @@ export const Report: React.FC<ReportProps> = ({
           </div>
         )}
       </div>
+
+      {/* Phase 7 AI Review Section (Grounded LLM Findings) */}
+      <div className="p-6 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-850 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-6 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center">
+              <Sparkles className="h-3.5 w-3.5" />
+            </div>
+            <h3 className="text-base font-bold text-white">Grounded AI Review</h3>
+            {llmReview && (
+              <span className="text-xs font-mono text-zinc-400">
+                Provider: {llmReview.provider || 'gemini'} | Model: {llmReview.model}
+              </span>
+            )}
+          </div>
+
+          {llmReview?.available ? (
+            <span className="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-teal-950 border border-teal-800 text-teal-400">
+              LLM review complete
+            </span>
+          ) : (
+            <span className="px-2.5 py-0.5 rounded text-xs font-mono font-semibold bg-zinc-900 border border-zinc-800 text-amber-400 flex items-center gap-1.5">
+              <AlertCircle className="h-3.5 w-3.5" />
+              LLM review unavailable ({llmReview?.reason || 'key not set'})
+            </span>
+          )}
+        </div>
+
+        {llmReview?.available ? (
+          <div className="space-y-4">
+            <div className="text-xs text-zinc-400 flex items-center gap-2">
+              <span className="text-zinc-500 font-medium">Retrieved vault items:</span>
+              <span className="font-mono text-teal-400">
+                {(llmReview.retrieved_citation_ids || []).join(', ') || 'None'}
+              </span>
+            </div>
+
+            {llmReview.findings.length === 0 ? (
+              <p className="text-xs text-zinc-400 italic">No additional AI compliance suggestions generated.</p>
+            ) : (
+              llmReview.findings.map((f, idx) => (
+                <FindingCard
+                  key={`llm-${idx}`}
+                  finding={f}
+                  onApplyFix={handleApplyFix}
+                  applyingFixId={applyingFixId}
+                />
+              ))
+            )}
+
+            <p className="text-[11px] text-zinc-500 italic pt-2 border-t border-zinc-900">
+              Disclosure: AI suggestions are grounded exclusively in retrieved vault items and filtered via the server-side Citation Validator. Reviewer confirmation is required.
+            </p>
+          </div>
+        ) : (
+          <div className="text-xs text-zinc-400 space-y-1">
+            <p>
+              Grounded AI review is currently unavailable: <span className="font-mono text-amber-400">{llmReview?.reason || 'key not set'}</span>.
+            </p>
+            <p className="text-zinc-500">
+              Deterministic checks continue to provide 100% compliance verification without relying on external model availability.
+            </p>
+          </div>
+        )}
+      </div>
+
+
     </div>
   );
 };

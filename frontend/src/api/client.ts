@@ -129,17 +129,29 @@ class ApiClient {
     return res.json();
   }
 
-  async reviewDraft(draftId: string): Promise<Finding[]> {
+  async reviewDraft(draftId: string, options?: { logo_confirmed?: boolean; palette_off?: boolean; contrast_ratio?: number }): Promise<{
+    findings: Finding[];
+    llm_review?: any;
+  }> {
     const res = await fetch(`${this.base}/api/drafts/${draftId}/review`, {
       method: 'POST',
       headers: this.getHeaders(),
+      body: JSON.stringify(options || {}),
     });
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
       throw new Error(errorData.detail || 'Failed to review draft');
     }
-    return res.json();
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      return { findings: data };
+    }
+    return {
+      findings: data.findings || data.deterministic_findings || [],
+      llm_review: data.llm_review,
+    };
   }
+
 
   async applyFix(draftId: string, findingId: string): Promise<{
     draft_id: string;

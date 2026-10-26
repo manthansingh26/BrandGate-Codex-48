@@ -19,6 +19,8 @@ export const App: React.FC = () => {
   const [activeBrand, setActiveBrand] = useState<Brand | null>(null);
   const [activeDraft, setActiveDraft] = useState<Draft | null>(null);
   const [draftFindings, setDraftFindings] = useState<Finding[]>([]);
+  const [llmReviewResult, setLlmReviewResult] = useState<any | null>(null);
+
 
   // Initialize Supabase Auth listener
   useEffect(() => {
@@ -86,18 +88,23 @@ export const App: React.FC = () => {
     setActiveTab('submit');
   };
 
-  const handleReviewCompleted = (draft: Draft, findings: Finding[]) => {
+  const handleReviewCompleted = (draft: Draft, findings: Finding[], llmReview?: any) => {
     setActiveDraft(draft);
     setDraftFindings(findings);
+    setLlmReviewResult(llmReview || null);
     setActiveTab('report');
   };
 
-  const handleDraftUpdated = (draft: Draft, findings?: Finding[]) => {
+  const handleDraftUpdated = (draft: Draft, findings?: Finding[], llmReview?: any) => {
     setActiveDraft(draft);
     if (findings) {
       setDraftFindings(findings);
     }
+    if (llmReview !== undefined) {
+      setLlmReviewResult(llmReview);
+    }
   };
+
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col font-sans">
@@ -132,11 +139,13 @@ export const App: React.FC = () => {
           <Report
             draft={activeDraft}
             findings={draftFindings}
+            llmReview={llmReviewResult}
             onDraftUpdated={handleDraftUpdated}
             onNavigateToReview={() => setActiveTab('review')}
             apiStatus={apiStatus}
           />
         )}
+
         {activeTab === 'review' && (
           <Review
             draft={activeDraft}

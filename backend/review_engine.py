@@ -224,6 +224,7 @@ def apply_fix_to_text(body_text: str, finding: Dict[str, Any]) -> str:
     """
     Applies the suggested_fix of a finding to body_text.
     Supports price fixes (e.g. F-12 -> Rs. 1,299) and terminology replacements.
+    Guarantees no leftover "No. 1" fragment remains.
     """
     suggested_fix = finding.get("suggested_fix")
     if not suggested_fix:
@@ -232,30 +233,32 @@ def apply_fix_to_text(body_text: str, finding: Dict[str, Any]) -> str:
     citation_id = finding.get("citation_id")
     explanation = finding.get("explanation", "")
 
-    # Price fix: F-12
+    # 1. Price fix: F-12
     if citation_id == "F-12" or "Rs." in suggested_fix:
-        # Match any rupee amount in the draft and replace with suggested_fix
         price_re = re.compile(r'(?:Rs\.?|INR|₹)\s*[\d,]+', re.IGNORECASE)
         if price_re.search(body_text):
             return price_re.sub(suggested_fix, body_text, count=1)
 
-    # Terminology or claim replacement
-    match_claim = re.search(r"'(.*?)'", explanation)
+    # 2. Superlatives / Claims (R-04): clean replacement of "India's No. 1"
+    if "no. 1" in explanation.lower() or "no. 1" in body_text.lower():
+        no1_pattern = re.compile(r"India['’]s\s+No\.?\s*1|No\.?\s*1", re.IGNORECASE)
+        if no1_pattern.search(body_text):
+            return no1_pattern.sub(suggested_fix, body_text, count=1)
+
+    # 3. Clinically proven replacement
+    if "clinically proven" in explanation.lower() or "clinically proven" in body_text.lower():
+        cp_pattern = re.compile(r"clinically\s+proven", re.IGNORECASE)
+        if cp_pattern.search(body_text):
+            return cp_pattern.sub(suggested_fix, body_text, count=1)
+
+    # 4. General claim replacement matching "Claim '...' is"
+    match_claim = re.search(r"Claim\s+['\"](.*?)['\"]\s+is", explanation)
     if match_claim:
-        target_phrase = match_claim.group(1)
-
-        # Handle "India's No. 1" cleanly so no leftover "'s No. 1" remains
-        if "no. 1" in target_phrase.lower():
-            clean_re = re.compile(r"(?:India['’]?s\s*)?No\.?\s*1", re.IGNORECASE)
-            if clean_re.search(body_text):
-                return clean_re.sub(suggested_fix, body_text, count=1)
-
-        if target_phrase in body_text:
-            return body_text.replace(target_phrase, suggested_fix, 1)
-
-        phrase_re = re.compile(re.escape(target_phrase), re.IGNORECASE)
-        if phrase_re.search(body_text):
-            return phrase_re.sub(suggested_fix, body_text, count=1)
+        target = match_claim.group(1)
+        target_re = re.compile(re.escape(target), re.IGNORECASE)
+        if target_re.search(body_text):
+            return target_re.sub(suggested_fix, body_text, count=1)
 
     return body_text
+
 

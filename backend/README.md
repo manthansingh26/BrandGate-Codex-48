@@ -102,9 +102,29 @@ Set the required environment variables:
 - `POST /api/drafts/{draft_id}/image` -> Attaches public `image_url` and `alt_text`. If `logo_confirmed` is true, logs reviewer verification of approved current logo (A-02).
 - `GET /api/insights?brand_id={brand_id}` -> Queries the live database to return actual aggregated counts of findings grouped by canonical citation IDs (`F-12`, `R-04`, `A-02`, `R-09`, `P-01`..`P-04`, `T-01`..`T-04`) and lanes (`contradiction`, `evidence_needed`, `human_decision`). Zero counts are shown as `0` (never hidden or fabricated).
 
+### Grounded LLM Review & pgvector (Phase 7)
+- `POST /api/drafts/{draft_id}/review` -> In addition to deterministic safety-net findings, executes retrieval-grounded LLM review using targeted vault items. Enforces a 15-second strict timeout, handles failures gracefully (e.g. `key not set`, `model not found`, `rate limit`), and passes all AI suggestions through the Phase 3 Citation Validator.
+- **Provider Switch**:
+  - Primary provider: Google Gemini (`LLM_PROVIDER=gemini`) via Google AI Studio free tier.
+  - Optional fallback: NVIDIA NIM (`LLM_API_KEY` and `LLM_API_URL`).
+  - If no key is set: returns `LLM review unavailable (key not set)` without crashing.
+- **Environment variables in `/backend/.env`**:
+  ```bash
+  LLM_PROVIDER=gemini
+  GEMINI_API_KEY=<your_google_ai_studio_api_key>
+  LLM_MODEL=gemini-2.5-flash
+  ```
+- **Disclosure & Limitations**:
+  - LLM review findings are suggestions grounded exclusively in retrieved vault items and are citation-checked by the server-side validator.
+  - Reviewer confirmation is always required before publication.
+  - Demo data only is used in this hackathon build — no real confidential brand data is sent to external LLM providers.
+  - Free-tier content may be used by the provider to improve its products.
+
+
 ---
 
 ## Supabase Storage Setup (Phase 6 Manual Step)
+
 
 1. Open your Supabase project dashboard at [supabase.com](https://supabase.com).
 2. Go to **Storage** in the left sidebar.

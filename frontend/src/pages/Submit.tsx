@@ -8,9 +8,10 @@ import { ShieldCheck, AlertCircle, RefreshCw, CheckCircle2, Image as ImageIcon, 
 
 interface SubmitProps {
   currentDraft: Draft | null;
-  onReviewCompleted: (draft: Draft, findings: Finding[]) => void;
+  onReviewCompleted: (draft: Draft, findings: Finding[], llmReview?: any) => void;
   apiStatus: ApiConnectionStatus;
 }
+
 
 export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted, apiStatus }) => {
   const [title, setTitle] = useState(currentDraft?.title || 'Creative Draft');
@@ -112,9 +113,9 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
         }
 
         // Run server-side review with image checks
-        const findings = await api.reviewDraft(draftId);
+        const reviewRes = await api.reviewDraft(draftId);
         const updatedDraft = await api.getDraft(draftId);
-        onReviewCompleted(updatedDraft, findings);
+        onReviewCompleted(updatedDraft, reviewRes.findings, reviewRes.llm_review);
       } else {
         // Local demo mode review (when API offline)
         const localFindings = runLocalDemoReview(bodyText, altText, imagePreview);
@@ -139,6 +140,7 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
         };
         onReviewCompleted(localDraft, localFindings);
       }
+
     } catch (err: any) {
       setError(err.message || 'Review failed');
     } finally {

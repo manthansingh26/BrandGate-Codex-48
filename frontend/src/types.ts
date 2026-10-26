@@ -85,7 +85,19 @@ export interface InsightsData {
   counts_by_lane: Record<string, number>;
 }
 
+export interface LlmReviewResult {
+  available: boolean;
+  status: string;
+  reason?: string | null;
+  provider?: string;
+  model: string;
+  retrieved_citation_ids: string[];
+  findings: Finding[];
+}
+
+
 export interface Draft {
+
 
   id: string;
   brand_id: string;
