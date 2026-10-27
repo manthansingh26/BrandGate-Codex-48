@@ -77,7 +77,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Mobile menu toggle for 375px screens (Blocker 7) */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none transition-colors"
+            className="icon-btn-micro md:hidden p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900"
             aria-label="Toggle navigation menu"
             aria-expanded={mobileMenuOpen}
           >
@@ -96,60 +96,60 @@ export const Navbar: React.FC<NavbarProps> = ({
           <nav className="hidden md:flex items-center gap-1">
             <button
               onClick={() => setActiveTab('home')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
+              className={`nav-tab-micro px-3 py-1.5 rounded-md text-sm font-medium ${
                 activeTab === 'home'
                   ? 'bg-zinc-800 text-white font-semibold'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  : 'text-zinc-400 hover:text-white'
               }`}
             >
               Home
             </button>
             <button
               onClick={() => setActiveTab('vault')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
+              className={`nav-tab-micro px-3 py-1.5 rounded-md text-sm font-medium ${
                 activeTab === 'vault'
                   ? 'bg-zinc-800 text-white font-semibold'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  : 'text-zinc-400 hover:text-white'
               }`}
             >
               Brand Vault
             </button>
             <button
               onClick={() => setActiveTab('submit')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
+              className={`nav-tab-micro px-3 py-1.5 rounded-md text-sm font-medium ${
                 activeTab === 'submit'
                   ? 'bg-zinc-800 text-white font-semibold'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  : 'text-zinc-400 hover:text-white'
               }`}
             >
               Submit
             </button>
             <button
               onClick={() => setActiveTab('report')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
+              className={`nav-tab-micro px-3 py-1.5 rounded-md text-sm font-medium ${
                 activeTab === 'report'
                   ? 'bg-zinc-800 text-white font-semibold'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  : 'text-zinc-400 hover:text-white'
               }`}
             >
               Report
             </button>
             <button
               onClick={() => setActiveTab('review')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
+              className={`nav-tab-micro px-3 py-1.5 rounded-md text-sm font-medium ${
                 activeTab === 'review'
                   ? 'bg-zinc-800 text-white font-semibold'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  : 'text-zinc-400 hover:text-white'
               }`}
             >
               Review
             </button>
             <button
               onClick={() => setActiveTab('insights')}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
+              className={`nav-tab-micro px-3 py-1.5 rounded-md text-sm font-medium ${
                 activeTab === 'insights'
                   ? 'bg-zinc-800 text-white font-semibold'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  : 'text-zinc-400 hover:text-white'
               }`}
             >
               Insights
@@ -201,7 +201,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {apiStatus !== 'connected' && (
             <button
               onClick={onRefreshHealth}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-teal-500 hover:bg-teal-400 text-black transition-all shadow-md active:scale-95"
+              className="btn-primary-micro inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-teal-500 hover:bg-teal-400 text-black shadow-md"
               title="Re-run health check immediately"
             >
               <RefreshCw className="h-3 w-3" />
@@ -219,7 +219,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
               <button
                 onClick={onSignOut}
-                className="inline-flex items-center gap-1 px-3 py-1 rounded-lg border border-zinc-800 hover:border-zinc-700 text-xs text-zinc-400 hover:text-white transition-colors"
+                className="btn-secondary-micro inline-flex items-center gap-1 px-3 py-1 rounded-lg border border-zinc-800 hover:border-zinc-700 text-xs text-zinc-400 hover:text-white"
               >
                 <LogOut className="h-3 w-3" />
                 Sign out
@@ -228,7 +228,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           ) : (
             <button
               onClick={() => setAuthModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs text-white font-medium transition-colors"
+              className="btn-secondary-micro inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs text-white font-medium"
             >
               <LogIn className="h-3 w-3 text-teal-400" />
               Sign in

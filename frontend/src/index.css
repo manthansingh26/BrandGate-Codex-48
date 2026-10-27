@@ -59,17 +59,132 @@ code, kbd, samp, pre {
 
   .glass-card-hover:hover {
     transform: translateY(-2px);
-    border-color: rgba(37, 224, 190, 0.35);
-    box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.6), 0 0 20px -5px rgba(37, 224, 190, 0.15);
+    border-color: rgba(45, 212, 191, 0.35);
+    box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.6), 0 0 20px -5px rgba(45, 212, 191, 0.15);
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* Part B — Professional Micro-Interactions (Hover + Active + Focus-Visible)   */
+  /* -------------------------------------------------------------------------- */
+
+  /* 1. Primary Teal Buttons */
+  .btn-primary-micro {
+    cursor: pointer;
+    transition-property: transform, box-shadow, filter, background-color, border-color, color;
+    transition-duration: 180ms;
+    transition-timing-function: ease-out;
+  }
+  .btn-primary-micro:hover:not(:disabled) {
+    transform: translateY(-1px) scale(1.02);
+    filter: brightness(1.08);
+    box-shadow: 0 8px 24px rgba(45, 212, 191, 0.35);
+  }
+  .btn-primary-micro:active:not(:disabled) {
+    transform: translateY(0) scale(0.98);
+    box-shadow: 0 2px 8px rgba(45, 212, 191, 0.20);
+  }
+  .btn-primary-micro:focus-visible {
+    outline: 2px solid #2DD4BF !important;
+    outline-offset: 2px !important;
+  }
+  .btn-primary-micro:disabled {
+    cursor: not-allowed !important;
+    opacity: 0.4 !important;
+    transform: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+  }
+
+  /* 2. Secondary Buttons */
+  .btn-secondary-micro {
+    cursor: pointer;
+    transition-property: transform, box-shadow, background-color, border-color, color;
+    transition-duration: 180ms;
+    transition-timing-function: ease-out;
+  }
+  .btn-secondary-micro:hover:not(:disabled) {
+    transform: translateY(-1px);
+    border-color: #2DD4BF;
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  .btn-secondary-micro:active:not(:disabled) {
+    transform: translateY(0) scale(0.98);
+  }
+  .btn-secondary-micro:focus-visible {
+    outline: 2px solid #2DD4BF !important;
+    outline-offset: 2px !important;
+  }
+  .btn-secondary-micro:disabled {
+    cursor: not-allowed !important;
+    opacity: 0.4 !important;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+
+  /* 3. Navbar Tabs */
+  .nav-tab-micro {
+    cursor: pointer;
+    transition-property: background-color, color, border-color;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+  .nav-tab-micro:hover:not(.tab-active) {
+    background-color: rgba(255, 255, 255, 0.10);
+    color: #FFFFFF;
+  }
+  .nav-tab-micro:focus-visible {
+    outline: 2px solid #2DD4BF !important;
+    outline-offset: 2px !important;
+  }
+
+  /* 4. Non-clickable Feature Cards & Stat Tiles */
+  .feature-card-micro {
+    cursor: default;
+    transition-property: border-color, box-shadow, transform;
+    transition-duration: 200ms;
+    transition-timing-function: ease-out;
+  }
+  .feature-card-micro:hover {
+    border-color: rgba(45, 212, 191, 0.30);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.6), 0 0 20px -5px rgba(45, 212, 191, 0.15);
+  }
+
+  /* 5. Vault Rows, Report Finding Cards, Review Timeline */
+  .row-hover-micro {
+    transition-property: background-color, border-color;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+  .row-hover-micro:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.10);
+  }
+
+  /* 6. Modal Close (X), Backdrop, and Icon Buttons */
+  .icon-btn-micro {
+    cursor: pointer;
+    transition-property: background-color, color, transform;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+  .icon-btn-micro:hover:not(:disabled) {
+    background-color: rgba(255, 255, 255, 0.10);
+  }
+  .icon-btn-micro:hover:not(:disabled) svg {
+    transform: scale(1.05);
+  }
+  .icon-btn-micro:focus-visible {
+    outline: 2px solid #2DD4BF !important;
+    outline-offset: 2px !important;
   }
 
   .focus-ring {
     outline: none;
   }
-
   .focus-ring:focus-visible {
-    outline: 2px solid #25E0BE;
-    outline-offset: 2px;
+    outline: 2px solid #2DD4BF !important;
+    outline-offset: 2px !important;
   }
 }
 
@@ -79,6 +194,7 @@ code, kbd, samp, pre {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+    transform: none !important;
   }
 }
 

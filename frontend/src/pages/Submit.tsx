@@ -469,7 +469,7 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
           <button
             onClick={handleReview}
             disabled={reviewing || !bodyText.trim()}
-            className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-sm shadow-xl shadow-teal-500/20 active:scale-95 transition-all disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
+            className="btn-primary-micro inline-flex items-center gap-2.5 px-8 py-3.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-sm shadow-xl shadow-teal-500/20 disabled:opacity-50"
           >
             {reviewing ? (
               <>

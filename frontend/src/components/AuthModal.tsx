@@ -241,7 +241,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-black font-semibold text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
+            className="btn-primary-micro w-full py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-black font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
             {isSignUp ? 'Sign Up' : 'Sign In'}
@@ -279,7 +279,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
           type="button"
           onClick={onClose}
           aria-label="Close modal"
-          className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none z-10 transition-colors"
+          className="icon-btn-micro absolute top-4 right-4 p-2 text-zinc-400 hover:text-white rounded-lg z-10"
         >
           <X className="h-4 w-4" />
         </button>

@@ -10,6 +10,7 @@ interface ReportProps {
   llmReview?: LlmReviewResult | null;
   onDraftUpdated: (draft: Draft, findings: Finding[], llmReview?: LlmReviewResult | null) => void;
   onNavigateToReview: () => void;
+  onNavigateToSubmit?: () => void;
   apiStatus: ApiConnectionStatus;
 }
 
@@ -19,6 +20,7 @@ export const Report: React.FC<ReportProps> = ({
   llmReview,
   onDraftUpdated,
   onNavigateToReview,
+  onNavigateToSubmit,
   apiStatus,
 }) => {
   const [applyingFixId, setApplyingFixId] = useState<string | null>(null);
@@ -134,7 +136,7 @@ export const Report: React.FC<ReportProps> = ({
 
         <button
           onClick={onNavigateToReview}
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-sm shadow-lg shadow-teal-500/20 active:scale-95 transition-all focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
+          className="btn-primary-micro inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-sm shadow-lg shadow-teal-500/20 active:scale-95 transition-all"
         >
           Proceed to Approval Workflow
           <ArrowRight className="h-4 w-4" />
@@ -149,48 +151,56 @@ export const Report: React.FC<ReportProps> = ({
 
       {/* Metric Cards Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="glass-card p-5 rounded-2xl border border-red-500/20">
+        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-red-500/20">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-red-400">Contradictions</span>
             <AlertCircle className="h-4 w-4 text-red-400" />
           </div>
           <span className="text-3xl font-black text-white font-mono mt-2 block">
-            {contradictions.length}
+            {draft.status === 'draft' ? '-' : contradictions.length}
           </span>
-          <span className="text-[11px] text-zinc-500 mt-1 block">Factual & Pricing mismatches</span>
+          <span className="text-[11px] text-zinc-500 mt-1 block">
+            {draft.status === 'draft' ? 'Pending draft review' : 'Factual & Pricing mismatches'}
+          </span>
         </div>
 
-        <div className="glass-card p-5 rounded-2xl border border-amber-500/20">
+        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-amber-500/20">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">Evidence Needed</span>
             <AlertTriangle className="h-4 w-4 text-amber-400" />
           </div>
           <span className="text-3xl font-black text-white font-mono mt-2 block">
-            {evidenceNeeded.length}
+            {draft.status === 'draft' ? '-' : evidenceNeeded.length}
           </span>
-          <span className="text-[11px] text-zinc-500 mt-1 block">Unsubstantiated superlatives</span>
+          <span className="text-[11px] text-zinc-500 mt-1 block">
+            {draft.status === 'draft' ? 'Pending draft review' : 'Unsubstantiated superlatives'}
+          </span>
         </div>
 
-        <div className="glass-card p-5 rounded-2xl border border-sky-500/20">
+        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-sky-500/20">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-sky-400">Human Decision</span>
             <ShieldCheck className="h-4 w-4 text-sky-400" />
           </div>
           <span className="text-3xl font-black text-white font-mono mt-2 block">
-            {humanDecision.length}
+            {draft.status === 'draft' ? '-' : humanDecision.length}
           </span>
-          <span className="text-[11px] text-zinc-500 mt-1 block">Logos, palettes & tone</span>
+          <span className="text-[11px] text-zinc-500 mt-1 block">
+            {draft.status === 'draft' ? 'Pending draft review' : 'Logos, palettes & tone'}
+          </span>
         </div>
 
-        <div className="glass-card p-5 rounded-2xl border border-teal-500/20">
+        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-teal-500/20">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-teal-400">AI Suggestions</span>
             <Sparkles className="h-4 w-4 text-teal-400" />
           </div>
           <span className="text-3xl font-black text-white font-mono mt-2 block">
-            {aiFindings.length}
+            {draft.status === 'draft' ? '-' : aiFindings.length}
           </span>
-          <span className="text-[11px] text-zinc-500 mt-1 block">Grounded Gemini review</span>
+          <span className="text-[11px] text-zinc-500 mt-1 block">
+            {draft.status === 'draft' ? 'Pending draft review' : 'Grounded Gemini review'}
+          </span>
         </div>
       </div>
 
@@ -224,7 +234,31 @@ export const Report: React.FC<ReportProps> = ({
           <span className="text-xs text-teal-400 font-mono font-bold">"No citation, no flag"</span>
         </div>
 
-        {findings.length === 0 ? (
+        {draft.status === 'draft' ? (
+          <div className="glass-card p-10 rounded-2xl border border-zinc-800 text-center space-y-4">
+            <div className="h-12 w-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mx-auto">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+            <h3 className="text-xl font-bold text-white">Not yet reviewed</h3>
+            <p className="text-sm text-zinc-400 max-w-md mx-auto">
+              This draft has not been evaluated against the active Brand Vault rules. Click <span className="text-teal-400 font-semibold">Review Draft</span> to check this draft.
+            </p>
+            <button
+              onClick={() => {
+                if (onNavigateToSubmit) {
+                  onNavigateToSubmit();
+                } else if (typeof window !== 'undefined') {
+                  window.history.pushState({ tab: 'submit' }, '', '/submit');
+                  window.dispatchEvent(new PopStateEvent('popstate'));
+                }
+              }}
+              className="btn-primary-micro inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-xs shadow-lg shadow-teal-500/20 transition-all"
+            >
+              Go to Submit & Review Draft
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        ) : findings.length === 0 ? (
           <div className="glass-card p-10 rounded-2xl border border-emerald-500/20 text-center space-y-3">
             <CheckCircle2 className="h-12 w-12 text-emerald-400 mx-auto" />
             <h3 className="text-xl font-bold text-white">All Governance Checks Passed!</h3>
@@ -320,15 +354,19 @@ export const Report: React.FC<ReportProps> = ({
             </div>
           </div>
           <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-teal-400">
-            {llmReview?.status || 'Advisory Layer Active'}
+            {draft.status === 'draft' || !llmReview ? 'Pending Draft Review' : (llmReview?.status || 'Advisory Layer Active')}
           </span>
         </div>
 
         {/* AI Findings List */}
-        {aiFindings.length > 0 ? (
+        {draft.status === 'draft' || !llmReview ? (
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            AI compliance review has not run yet. Run Review Draft on the Submit page to generate grounded advisory intelligence.
+          </p>
+        ) : aiFindings.length > 0 ? (
           <div className="space-y-3">
             {aiFindings.map((f, i) => (
-              <div key={i} className="p-4 rounded-xl bg-black/40 border border-zinc-800 flex items-start justify-between gap-4">
+              <div key={i} className="row-hover-micro p-4 rounded-xl bg-black/40 border border-zinc-800 flex items-start justify-between gap-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-teal-500/10 text-teal-300 border border-teal-500/20">
@@ -381,7 +419,7 @@ const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applying
   }[finding.severity] || 'text-zinc-400 bg-zinc-900 border-zinc-800';
 
   return (
-    <div className="glass-card glass-card-hover p-5 rounded-2xl border border-white/[0.08] flex flex-wrap items-center justify-between gap-4">
+    <div className="glass-card row-hover-micro p-5 rounded-2xl border border-white/[0.08] flex flex-wrap items-center justify-between gap-4">
       <div className="space-y-2 max-w-2xl">
         <div className="flex items-center gap-2">
           <span className="px-2.5 py-0.5 rounded-md text-xs font-mono font-bold bg-teal-500/10 text-teal-300 border border-teal-500/20">
@@ -406,7 +444,7 @@ const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applying
         <button
           onClick={() => onApplyFix(finding)}
           disabled={applyingFixId !== null}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs shadow-md shadow-teal-500/20 active:scale-95 transition-all disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
+          className="btn-primary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs shadow-md shadow-teal-500/20 active:scale-95 transition-all disabled:opacity-50"
         >
           {isApplying ? (
             <>

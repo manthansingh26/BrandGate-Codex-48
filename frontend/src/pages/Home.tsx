@@ -1,21 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Brand, Draft, ApiConnectionStatus } from '../types';
 import { api } from '../api/client';
 import { BrandGateLogo } from '../components/BrandGateLogo';
-import { ArrowRight, ShieldCheck, FileText, Sparkles, Loader2, BookOpen, CheckCircle2, Lock, Zap } from 'lucide-react';
+import { ArrowRight, ShieldCheck, FileText, Sparkles, Loader2, BookOpen, CheckCircle2, Lock, Zap, AlertTriangle, X } from 'lucide-react';
 
 interface HomeProps {
   activeBrand: Brand | null;
   onDraftCreated: (draft: Draft) => void;
   onNavigateToVault?: () => void;
   apiStatus: ApiConnectionStatus;
+  currentDraft?: Draft | null;
 }
 
-export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavigateToVault, apiStatus }) => {
+export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavigateToVault, apiStatus, currentDraft }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showReplaceModal, setShowReplaceModal] = useState(false);
 
-  const handleTryDemoDraft = async () => {
+  // Close replace modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowReplaceModal(false);
+    };
+    if (showReplaceModal) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showReplaceModal]);
+
+  const handleTryDemoDraft = () => {
+    if (currentDraft && currentDraft.status === 'approved') {
+      setShowReplaceModal(true);
+      return;
+    }
+    executeTryDemoDraft();
+  };
+
+  const executeTryDemoDraft = async () => {
+    setShowReplaceModal(false);
     setLoading(true);
     setError(null);
 
@@ -118,7 +140,7 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
           <button
             onClick={handleTryDemoDraft}
             disabled={loading}
-            className="group inline-flex items-center justify-center gap-3 pl-7 pr-2.5 py-2.5 rounded-full bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-sm shadow-xl shadow-teal-500/20 active:scale-[0.98] transition-all duration-200 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
+            className="btn-primary-micro group inline-flex items-center justify-center gap-3 pl-7 pr-2.5 py-2.5 rounded-full bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-sm shadow-xl shadow-teal-500/20 active:scale-[0.98] transition-all duration-200 disabled:opacity-50"
           >
             {loading ? (
               <span className="flex items-center gap-2 py-1 pr-4">
@@ -138,7 +160,7 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
           {onNavigateToVault && (
             <button
               onClick={onNavigateToVault}
-              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-zinc-900/90 hover:bg-zinc-850 text-zinc-300 hover:text-white border border-zinc-800 text-sm font-semibold transition-all duration-200 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
+              className="btn-secondary-micro inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-zinc-900/90 hover:bg-zinc-850 text-zinc-300 hover:text-white border border-zinc-800 text-sm font-semibold transition-all duration-200 active:scale-[0.98]"
             >
               <BookOpen className="h-4 w-4 text-zinc-400" />
               Explore Brand Vault
@@ -155,19 +177,19 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
 
       {/* Proof / Verification Metrics Strip (Linear-Style Ground Truth) */}
       <div className="pt-10 border-t border-[#1B2732] grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-        <div className="p-4 rounded-2xl bg-[#0B1118]/80 border border-white/[0.05]">
+        <div className="feature-card-micro p-4 rounded-2xl bg-[#0B1118]/80 border border-white/[0.05]">
           <div className="text-2xl font-black text-white font-mono">4 Categories</div>
           <div className="text-[11px] text-zinc-400 mt-1 uppercase tracking-wider font-semibold">Facts • Rules • Terms • Palette</div>
         </div>
-        <div className="p-4 rounded-2xl bg-[#0B1118]/80 border border-white/[0.05]">
+        <div className="feature-card-micro p-4 rounded-2xl bg-[#0B1118]/80 border border-white/[0.05]">
           <div className="text-2xl font-black text-teal-400 font-mono">0 Uncited</div>
           <div className="text-[11px] text-zinc-400 mt-1 uppercase tracking-wider font-semibold">Strict Evidence Filter</div>
         </div>
-        <div className="p-4 rounded-2xl bg-[#0B1118]/80 border border-white/[0.05]">
+        <div className="feature-card-micro p-4 rounded-2xl bg-[#0B1118]/80 border border-white/[0.05]">
           <div className="text-2xl font-black text-emerald-400 font-mono">Deterministic</div>
           <div className="text-[11px] text-zinc-400 mt-1 uppercase tracking-wider font-semibold">Server Verification Gate</div>
         </div>
-        <div className="p-4 rounded-2xl bg-[#0B1118]/80 border border-white/[0.05]">
+        <div className="feature-card-micro p-4 rounded-2xl bg-[#0B1118]/80 border border-white/[0.05]">
           <div className="text-2xl font-black text-[#5AF0D1] font-mono">Advisory AI</div>
           <div className="text-[11px] text-zinc-400 mt-1 uppercase tracking-wider font-semibold">Grounded Gemini Layer</div>
         </div>
@@ -175,7 +197,7 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
 
       {/* Feature Pillars — Double-Bezel Bento Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="double-bezel flex flex-col">
+        <div className="double-bezel feature-card-micro flex flex-col">
           <div className="double-bezel-inner p-7 flex-1 flex flex-col justify-between">
             <div>
               <div className="h-11 w-11 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 mb-5">
@@ -193,7 +215,7 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
           </div>
         </div>
 
-        <div className="double-bezel flex flex-col">
+        <div className="double-bezel feature-card-micro flex flex-col">
           <div className="double-bezel-inner p-7 flex-1 flex flex-col justify-between">
             <div>
               <div className="h-11 w-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 mb-5">
@@ -211,7 +233,7 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
           </div>
         </div>
 
-        <div className="double-bezel flex flex-col">
+        <div className="double-bezel feature-card-micro flex flex-col">
           <div className="double-bezel-inner p-7 flex-1 flex flex-col justify-between">
             <div>
               <div className="h-11 w-11 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 mb-5">
@@ -241,6 +263,66 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
           <span className="text-teal-400">Zero Hallucinations</span>
         </div>
       </div>
+
+      {/* Fix 2: Confirmation Modal when replacing an APPROVED draft */}
+      {showReplaceModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setShowReplaceModal(false)}
+        >
+          <div
+            className="glass-card p-6 sm:p-7 rounded-2xl border border-teal-500/30 max-w-lg w-full space-y-5 shadow-2xl relative"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="replace-modal-title"
+          >
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 id="replace-modal-title" className="text-base font-bold text-white tracking-tight">
+                    Replace Approved Draft?
+                  </h3>
+                  <span className="text-[11px] text-zinc-400 font-mono">
+                    LOCKED APPROVED SNAPSHOT active
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowReplaceModal(false)}
+                className="icon-btn-micro p-1.5 rounded-lg text-zinc-400 hover:text-white"
+                aria-label="Close dialog"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-sm text-zinc-200 leading-relaxed">
+              This will replace your approved draft (Version 4, LOCKED APPROVED SNAPSHOT). Continue with a fresh demo draft, or Keep approved draft?
+            </p>
+
+            <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setShowReplaceModal(false)}
+                className="btn-secondary-micro px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs font-semibold"
+              >
+                Keep approved draft
+              </button>
+              <button
+                type="button"
+                onClick={executeTryDemoDraft}
+                className="btn-primary-micro px-5 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-xs shadow-lg shadow-teal-500/20"
+              >
+                Continue with a fresh demo draft
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

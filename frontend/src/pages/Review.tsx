@@ -22,9 +22,10 @@ interface ReviewProps {
   findings: Finding[];
   userRole: UserRole;
   onDraftUpdated: (draft: Draft) => void;
+  onRoleChange?: (role: UserRole) => void;
 }
 
-export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDraftUpdated }) => {
+export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDraftUpdated, onRoleChange }) => {
   const [commentText, setCommentText] = useState('');
   const [changesComment, setChangesComment] = useState('');
   const [showChangesModal, setShowChangesModal] = useState(false);
@@ -42,7 +43,7 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
               window.dispatchEvent(new PopStateEvent('popstate'));
             }
           }}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs transition-colors"
+          className="btn-primary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs"
         >
           Return to Home
         </button>
@@ -196,14 +197,26 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Fix 4: Visible Switch to Reviewer action next to disabled Demo Reviewer Approve */}
+          {onRoleChange && !isApproved && userRole !== 'reviewer' && (
+            <button
+              onClick={() => onRoleChange('reviewer')}
+              className="btn-secondary-micro inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/30 text-xs font-bold"
+              title="Switch demo persona to Reviewer"
+            >
+              <UserCheck className="h-4 w-4 text-teal-400" />
+              Switch to Reviewer
+            </button>
+          )}
+
           {/* Request Approval Button */}
           {!isApproved && (
             <button
               onClick={handleRequestApproval}
               disabled={actionLoading || isPending || (!isChecked && !isNeedsChanges)}
               title={!isChecked && !isNeedsChanges ? 'Review draft first' : 'Request Reviewer approval'}
-              className="px-5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-xs font-bold transition-all disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
+              className="btn-secondary-micro px-5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 text-xs font-bold disabled:opacity-40"
             >
               {isPending ? 'Approval Pending' : 'Request Approval'}
             </button>
@@ -223,7 +236,7 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
                   ? 'Draft must be pending approval'
                   : 'Approve draft for publication'
               }
-              className="px-6 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black text-xs font-extrabold shadow-lg shadow-teal-500/20 active:scale-95 transition-all disabled:opacity-40 disabled:hover:bg-teal-400 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
+              className="btn-primary-micro px-6 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black text-xs font-extrabold shadow-lg shadow-teal-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Demo Reviewer Approve'}
             </button>
@@ -233,7 +246,7 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
           {!isApproved && isPending && userRole === 'reviewer' && (
             <button
               onClick={() => setShowChangesModal(true)}
-              className="px-4 py-2.5 rounded-xl bg-red-950/60 hover:bg-red-900/60 text-red-300 border border-red-800 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
+              className="btn-secondary-micro px-4 py-2.5 rounded-xl bg-red-950/60 hover:bg-red-900/60 text-red-300 border border-red-800 text-xs font-semibold"
             >
               Request Changes
             </button>
@@ -244,7 +257,17 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
       {userRole === 'creator' && !isApproved && isPending && (
         <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-400 flex flex-wrap items-center justify-between gap-2">
           <span>Reviewer approval required to approve this draft.</span>
-          <span className="text-teal-400 font-medium font-mono">Switch to Reviewer role above to approve.</span>
+          {onRoleChange ? (
+            <button
+              onClick={() => onRoleChange('reviewer')}
+              className="btn-secondary-micro inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border border-teal-500/30 text-xs font-mono font-bold"
+            >
+              <UserCheck className="h-3.5 w-3.5 text-teal-400" />
+              Switch to Reviewer
+            </button>
+          ) : (
+            <span className="text-teal-400 font-medium font-mono">Switch to Reviewer role above to approve.</span>
+          )}
         </div>
       )}
 
@@ -335,7 +358,7 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
                 (draft.decisions || []).map((d: Decision, idx: number) => (
                   <div
                     key={d.id || `dec-${idx}`}
-                    className="p-3.5 rounded-xl bg-black/60 border border-zinc-850 flex items-start justify-between text-xs gap-3"
+                    className="row-hover-micro p-3.5 rounded-xl bg-black/60 border border-zinc-850 flex items-start justify-between text-xs gap-3"
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
@@ -366,7 +389,7 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
                 <p className="text-xs text-zinc-500 italic">No comments yet. Add an annotation below.</p>
               ) : (
                 (draft.comments || []).map((c: any, idx: number) => (
-                  <div key={c.id || idx} className="p-3 rounded-xl bg-black/40 border border-zinc-850 text-xs space-y-1">
+                  <div key={c.id || idx} className="row-hover-micro p-3 rounded-xl bg-black/40 border border-zinc-850 text-xs space-y-1">
                     <div className="flex items-center justify-between text-zinc-400">
                       <span className="font-semibold text-zinc-300 font-mono">
                         {c.role || 'guest'} (v{c.version_no})
@@ -391,7 +414,7 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
               />
               <button
                 type="submit"
-                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-teal-400 border border-zinc-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                className="btn-secondary-micro px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-teal-400 border border-zinc-700 rounded-xl text-xs font-semibold flex items-center gap-1.5"
               >
                 <Send className="h-3 w-3" />
                 Post
@@ -411,7 +434,7 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
               {(draft.versions || []).map((v) => (
                 <div
                   key={v.version_no}
-                  className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+                  className={`row-hover-micro p-3 rounded-xl border text-xs flex items-center justify-between ${
                     v.version_no === draft.current_version
                       ? 'bg-teal-500/10 border-teal-500/30 text-white'
                       : 'bg-black/40 border-zinc-850 text-zinc-400'
@@ -486,14 +509,14 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
               <button
                 type="button"
                 onClick={() => setShowChangesModal(false)}
-                className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 text-xs hover:bg-zinc-700"
+                className="btn-secondary-micro px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 text-xs hover:bg-zinc-700"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={actionLoading || !changesComment.trim()}
-                className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs disabled:opacity-50"
+                className="btn-secondary-micro px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs disabled:opacity-50"
               >
                 Submit Changes Request
               </button>

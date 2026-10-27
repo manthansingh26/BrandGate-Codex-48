@@ -160,7 +160,7 @@ export const Vault: React.FC<VaultProps> = ({ activeBrand, currentUserEmail }) =
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsAdding(!isAdding)}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-sm shadow-md shadow-teal-500/20 active:scale-95 transition-all focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
+              className="btn-primary-micro inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-sm shadow-md shadow-teal-500/20"
             >
               <Plus className="h-4 w-4" />
               Add Item
@@ -168,7 +168,7 @@ export const Vault: React.FC<VaultProps> = ({ activeBrand, currentUserEmail }) =
             <button
               onClick={handleResetDemo}
               disabled={resetting}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-sm font-semibold transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
+              className="btn-secondary-micro inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-sm font-semibold disabled:opacity-50"
             >
               <RefreshCw className={`h-4 w-4 ${resetting ? 'animate-spin' : ''}`} />
               Reset Demo Vault
@@ -289,13 +289,13 @@ export const Vault: React.FC<VaultProps> = ({ activeBrand, currentUserEmail }) =
             <button
               type="button"
               onClick={() => setIsAdding(false)}
-              className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 text-xs font-semibold hover:bg-zinc-700 transition-colors"
+              className="btn-secondary-micro px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 text-xs font-semibold hover:bg-zinc-700"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl bg-teal-400 text-black font-extrabold text-xs shadow-md shadow-teal-500/20 hover:bg-teal-300 transition-colors"
+              className="btn-primary-micro px-5 py-2 rounded-xl bg-teal-400 text-black font-extrabold text-xs shadow-md shadow-teal-500/20 hover:bg-teal-300"
             >
               Save Vault Item
             </button>
@@ -418,7 +418,7 @@ export const Vault: React.FC<VaultProps> = ({ activeBrand, currentUserEmail }) =
                   return (
                     <div
                       key={item.item_id}
-                      className="glass-card glass-card-hover p-4 rounded-2xl border border-white/[0.08] flex flex-col justify-between"
+                      className="glass-card row-hover-micro p-4 rounded-2xl border border-white/[0.08] flex flex-col justify-between"
                     >
                       <div>
                         <div
@@ -486,7 +486,7 @@ const VaultCard: React.FC<VaultCardProps> = ({
   }[badgeColor];
 
   return (
-    <div className="glass-card glass-card-hover p-5 rounded-2xl border border-white/[0.08] flex flex-col justify-between">
+    <div className="glass-card row-hover-micro p-5 rounded-2xl border border-white/[0.08] flex flex-col justify-between">
       <div>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">

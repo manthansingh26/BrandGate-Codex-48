@@ -178,9 +178,13 @@ export const App: React.FC = () => {
 
   const handleDraftCreated = (draft: Draft) => {
     setActiveDraft(draft);
+    setDraftFindings([]);
+    setLlmReviewResult(null);
     if (typeof window !== 'undefined') {
       try {
         sessionStorage.setItem('brandgate_active_draft', JSON.stringify(draft));
+        sessionStorage.removeItem('brandgate_draft_findings');
+        sessionStorage.removeItem('brandgate_llm_review');
       } catch {}
     }
     navigateToTab('submit');
@@ -249,6 +253,7 @@ export const App: React.FC = () => {
           {activeTab === 'home' && (
             <Home
               activeBrand={activeBrand}
+              currentDraft={activeDraft}
               onDraftCreated={handleDraftCreated}
               onNavigateToVault={() => navigateToTab('vault')}
               apiStatus={apiStatus}
@@ -271,6 +276,7 @@ export const App: React.FC = () => {
               llmReview={llmReviewResult}
               onDraftUpdated={handleDraftUpdated}
               onNavigateToReview={() => navigateToTab('review')}
+              onNavigateToSubmit={() => navigateToTab('submit')}
               apiStatus={apiStatus}
             />
           )}
@@ -280,6 +286,7 @@ export const App: React.FC = () => {
               findings={draftFindings}
               userRole={userRole}
               onDraftUpdated={handleDraftUpdated}
+              onRoleChange={setUserRole}
             />
           )}
           {activeTab === 'insights' && (

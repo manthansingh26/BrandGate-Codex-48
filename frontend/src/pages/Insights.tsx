@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Brand, InsightsData } from '../types';
 import { api } from '../api/client';
-import { BarChart3, RefreshCw, AlertCircle } from 'lucide-react';
+import { BarChart3, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
 
 interface InsightsProps {
   activeBrand: Brand | null;
@@ -9,7 +9,7 @@ interface InsightsProps {
 
 export const Insights: React.FC<InsightsProps> = ({ activeBrand }) => {
   const [data, setData] = useState<InsightsData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchInsights = async () => {
@@ -70,10 +70,10 @@ export const Insights: React.FC<InsightsProps> = ({ activeBrand }) => {
         <button
           onClick={fetchInsights}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700 text-xs font-semibold transition-colors disabled:opacity-50"
+          className="btn-secondary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700 text-xs font-semibold disabled:opacity-50"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Refresh Counts
+          {loading ? 'Loading...' : 'Refresh Counts'}
         </button>
       </div>
 
@@ -91,32 +91,68 @@ export const Insights: React.FC<InsightsProps> = ({ activeBrand }) => {
 
       {/* Summary Stat Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="glass-card p-5 rounded-2xl border border-white/[0.08]">
+        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-white/[0.08]">
           <span className="text-xs font-semibold text-zinc-400 block mb-1 uppercase tracking-wider">Total Findings</span>
-          <span className="text-3xl font-black text-white font-mono">
-            {data ? data.total_findings : 0}
-          </span>
+          {loading || !data ? (
+            <div className="h-9 flex items-center">
+              <span className="text-xs font-mono text-zinc-400 animate-pulse flex items-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-400" />
+                Loading counts...
+              </span>
+            </div>
+          ) : (
+            <span className="text-3xl font-black text-white font-mono">
+              {data.total_findings}
+            </span>
+          )}
           <span className="text-[11px] text-zinc-500 mt-1 block">Across all draft reviews</span>
         </div>
-        <div className="glass-card p-5 rounded-2xl border border-red-500/20">
+        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-red-500/20">
           <span className="text-xs font-semibold text-red-400 block mb-1 uppercase tracking-wider">Contradictions</span>
-          <span className="text-3xl font-black text-red-400 font-mono">
-            {data ? data.counts_by_lane['contradiction'] || 0 : 0}
-          </span>
+          {loading || !data ? (
+            <div className="h-9 flex items-center">
+              <span className="text-xs font-mono text-red-400/70 animate-pulse flex items-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-red-400" />
+                Loading counts...
+              </span>
+            </div>
+          ) : (
+            <span className="text-3xl font-black text-red-400 font-mono">
+              {data.counts_by_lane['contradiction'] || 0}
+            </span>
+          )}
           <span className="text-[11px] text-zinc-500 mt-1 block">Factual discrepancies</span>
         </div>
-        <div className="glass-card p-5 rounded-2xl border border-amber-500/20">
+        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-amber-500/20">
           <span className="text-xs font-semibold text-amber-400 block mb-1 uppercase tracking-wider">Evidence Needed</span>
-          <span className="text-3xl font-black text-amber-400 font-mono">
-            {data ? data.counts_by_lane['evidence_needed'] || 0 : 0}
-          </span>
+          {loading || !data ? (
+            <div className="h-9 flex items-center">
+              <span className="text-xs font-mono text-amber-400/70 animate-pulse flex items-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-400" />
+                Loading counts...
+              </span>
+            </div>
+          ) : (
+            <span className="text-3xl font-black text-amber-400 font-mono">
+              {data.counts_by_lane['evidence_needed'] || 0}
+            </span>
+          )}
           <span className="text-[11px] text-zinc-500 mt-1 block">Unsubstantiated claims</span>
         </div>
-        <div className="glass-card p-5 rounded-2xl border border-sky-500/20">
+        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-sky-500/20">
           <span className="text-xs font-semibold text-sky-400 block mb-1 uppercase tracking-wider">Human Decision</span>
-          <span className="text-3xl font-black text-sky-400 font-mono">
-            {data ? data.counts_by_lane['human_decision'] || 0 : 0}
-          </span>
+          {loading || !data ? (
+            <div className="h-9 flex items-center">
+              <span className="text-xs font-mono text-sky-400/70 animate-pulse flex items-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" />
+                Loading counts...
+              </span>
+            </div>
+          ) : (
+            <span className="text-3xl font-black text-sky-400 font-mono">
+              {data.counts_by_lane['human_decision'] || 0}
+            </span>
+          )}
           <span className="text-[11px] text-zinc-500 mt-1 block">Logos, palettes & tone</span>
         </div>
       </div>
@@ -138,7 +174,7 @@ export const Insights: React.FC<InsightsProps> = ({ activeBrand }) => {
             const percent = Math.round((count / maxVal) * 100);
 
             return (
-              <div key={item.id} className="p-3.5 rounded-xl bg-black/40 border border-zinc-850 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div key={item.id} className="row-hover-micro p-3.5 rounded-xl bg-black/40 border border-zinc-850 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-3 min-w-[280px]">
                   <span className="px-2.5 py-0.5 rounded-md font-mono font-bold bg-teal-500/10 border border-teal-500/20 text-teal-300">
                     {item.id}
