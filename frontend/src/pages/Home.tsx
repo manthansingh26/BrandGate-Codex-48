@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Brand, Draft, ApiConnectionStatus } from '../types';
 import { api } from '../api/client';
+import { BrandGateLogo } from '../components/BrandGateLogo';
 import { ArrowRight, ShieldCheck, FileText, Sparkles, Loader2, BookOpen, CheckCircle2, Lock, Zap } from 'lucide-react';
 
 interface HomeProps {
@@ -77,9 +78,36 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-20 space-y-16">
       {/* Hero Header */}
       <div className="text-center space-y-6 max-w-4xl mx-auto">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-teal-500/25 bg-teal-500/10 text-teal-300 text-[11px] font-semibold tracking-wide uppercase shadow-sm">
-          <ShieldCheck className="h-3.5 w-3.5 text-teal-400" />
-          Pre-Publication Brand Governance Gate
+        {/* BrandGate New Logo Showcase Badge */}
+        <div className="flex flex-col items-center justify-center gap-3">
+          <div className="relative group cursor-default">
+            <div className="absolute -inset-1.5 rounded-2xl bg-gradient-to-r from-teal-500/25 via-cyan-500/20 to-teal-500/25 blur-xl opacity-70 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div className="relative double-bezel p-1 rounded-2xl">
+              <div className="double-bezel-inner px-4 py-2.5 rounded-xl bg-[#0B1118]/90 flex items-center gap-3">
+                <img
+                  src="/brandgate-badge-teal.png"
+                  alt="BrandGate Master Logo"
+                  className="h-10 w-10 object-contain rounded-lg drop-shadow-md group-hover:scale-105 transition-transform duration-200"
+                />
+                <div className="text-left">
+                  <div className="text-sm font-black tracking-tight text-white leading-tight flex items-center gap-1.5">
+                    BrandGate
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-teal-500/15 text-teal-300 border border-teal-500/30">
+                      v1.0
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-zinc-400 font-mono uppercase tracking-widest leading-none mt-0.5">
+                    Pre-Publication Gate
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-teal-500/25 bg-teal-500/10 text-teal-300 text-[11px] font-semibold tracking-wide uppercase shadow-sm mt-1">
+            <ShieldCheck className="h-3.5 w-3.5 text-teal-400" />
+            Pre-Publication Brand Governance Gate
+          </div>
         </div>
 
         <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.08]">
@@ -226,6 +254,18 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
               Citation-Validated Fixes
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Refined Brand & Governance Footer */}
+      <div className="pt-10 border-t border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#718190]">
+        <BrandGateLogo size="xs" variant="full" />
+        <div className="flex flex-wrap items-center justify-center gap-4 font-mono text-[11px]">
+          <span>Single Source of Truth</span>
+          <span className="hidden sm:inline">•</span>
+          <span>Deterministic Primary Gate</span>
+          <span className="hidden sm:inline">•</span>
+          <span className="text-teal-400">Zero Hallucinations</span>
         </div>
       </div>
     </div>

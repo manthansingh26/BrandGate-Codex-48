@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ApiConnectionStatus, UserRole } from '../types';
 import { AuthModal } from './AuthModal';
+import { BrandGateLogo } from './BrandGateLogo';
 import { AlertCircle, RefreshCw, LogIn, LogOut, User, Menu, X } from 'lucide-react';
 
 interface NavbarProps {
@@ -83,25 +84,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
 
-          <div
+          <BrandGateLogo
+            size="sm"
+            variant="full"
             onClick={() => {
               setActiveTab('home');
               setMobileMenuOpen(false);
             }}
-            className="flex items-center gap-2 cursor-pointer group"
-          >
-            <div className="h-8 w-8 rounded-lg bg-teal-500 flex items-center justify-center text-black font-black text-lg group-hover:scale-105 transition-transform">
-              BG
-            </div>
-            <div>
-              <span className="text-lg font-bold tracking-tight text-white flex items-center gap-1.5">
-                BrandGate
-              </span>
-              <span className="text-[10px] text-zinc-500 uppercase tracking-widest block font-medium -mt-1">
-                Pre-Publication Gate
-              </span>
-            </div>
-          </div>
+          />
 
           <nav className="hidden md:flex items-center gap-1">
             <button
@@ -249,14 +239,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mobile Navigation Drawer (Blocker 7 for 375px screens) */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-b border-zinc-800 bg-black/95 px-4 pt-2 pb-4 space-y-1">
+        <div className="md:hidden border-b border-zinc-800 bg-[#0B1118]/98 backdrop-blur-xl px-4 pt-3 pb-5 space-y-2 shadow-2xl">
+          <div className="pb-2 border-b border-white/[0.06] flex items-center justify-between">
+            <BrandGateLogo size="xs" variant="full" />
+            <span className="text-[10px] font-mono font-semibold text-zinc-500 uppercase tracking-wider">Navigation</span>
+          </div>
           {[
             { id: 'home', label: 'Home' },
             { id: 'vault', label: 'Brand Vault' },
-            { id: 'submit', label: 'Submit' },
-            { id: 'report', label: 'Report' },
-            { id: 'review', label: 'Review' },
-            { id: 'insights', label: 'Insights' },
+            { id: 'submit', label: 'Submit Creative' },
+            { id: 'report', label: 'Review Report' },
+            { id: 'review', label: 'Approval Workflow' },
+            { id: 'insights', label: 'Governance Insights' },
           ].map((item) => (
             <button
               key={item.id}
@@ -264,10 +258,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setActiveTab(item.id);
                 setMobileMenuOpen(false);
               }}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
+              className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none ${
                 activeTab === item.id
-                  ? 'bg-zinc-800 text-teal-400 font-semibold'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                  ? 'bg-teal-500/15 text-teal-300 border border-teal-500/30'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
               }`}
             >
               {item.label}
