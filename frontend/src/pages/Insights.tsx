@@ -41,7 +41,7 @@ export const Insights: React.FC<InsightsProps> = ({ activeBrand }) => {
     { id: 'T-01', label: 'Restricted Term: clinically proven (T-01)', type: 'Terminology' },
     { id: 'T-02', label: "Restricted Term: India's No. 1 (T-02)", type: 'Terminology' },
     { id: 'T-03', label: 'Approved Term: certified quality (T-03)', type: 'Terminology' },
-    { id: 'T-04', label: 'Approved Term: trusted by millions (T-04)', type: 'Terminology' },
+    { id: 'T-04', label: 'Seeded Term: trusted by millions (T-04)', type: 'Terminology (Pending Evidence)' },
   ];
 
   return (
@@ -168,44 +168,51 @@ export const Insights: React.FC<InsightsProps> = ({ activeBrand }) => {
         </div>
 
         <div className="space-y-3">
-          {canonicalCitations.map((item) => {
-            const count = data?.counts_by_citation[item.id] || 0;
-            const maxVal = Math.max(...Object.values(data?.counts_by_citation || {}), 1);
-            const percent = Math.round((count / maxVal) * 100);
+          {!data && loading ? (
+            <div className="p-8 text-center text-zinc-500 flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-teal-400" />
+              <span className="text-xs font-mono">Loading citation occurrences...</span>
+            </div>
+          ) : (
+            canonicalCitations.map((item) => {
+              const count = data ? (data.counts_by_citation[item.id] || 0) : null;
+              const maxVal = data ? Math.max(...Object.values(data.counts_by_citation || {}), 1) : 1;
+              const percent = count !== null ? Math.round((count / maxVal) * 100) : 0;
 
-            return (
-              <div key={item.id} className="row-hover-micro p-3.5 rounded-xl bg-black/40 border border-zinc-850 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-3 min-w-[280px]">
-                  <span className="px-2.5 py-0.5 rounded-md font-mono font-bold bg-teal-500/10 border border-teal-500/20 text-teal-300">
-                    {item.id}
-                  </span>
-                  <div>
-                    <span className="text-zinc-200 font-semibold block">{item.label}</span>
-                    <span className="text-[10px] uppercase font-semibold text-zinc-500">
-                      Category: {item.type}
+              return (
+                <div key={item.id} className="row-hover-micro p-3.5 rounded-xl bg-black/40 border border-zinc-850 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-3 min-w-[280px]">
+                    <span className="px-2.5 py-0.5 rounded-md font-mono font-bold bg-teal-500/10 border border-teal-500/20 text-teal-300">
+                      {item.id}
                     </span>
+                    <div>
+                      <span className="text-zinc-200 font-semibold block">{item.label}</span>
+                      <span className="text-[10px] uppercase font-semibold text-zinc-500">
+                        Category: {item.type}
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex-1 max-w-xs mx-0 sm:mx-4 hidden sm:block">
-                  <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-teal-400 rounded-full transition-all duration-500"
-                      style={{ width: `${count > 0 ? Math.max(percent, 8) : 0}%` }}
-                    ></div>
+                  <div className="flex-1 max-w-xs mx-0 sm:mx-4 hidden sm:block">
+                    <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-teal-400 rounded-full transition-all duration-500"
+                        style={{ width: `${count !== null && count > 0 ? Math.max(percent, 8) : 0}%` }}
+                      ></div>
+                    </div>
                   </div>
-                </div>
 
-                <span
-                  className={`font-mono font-bold px-3 py-1 rounded-full text-xs text-right whitespace-nowrap ${
-                    count > 0 ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30' : 'text-zinc-600 bg-zinc-900/60'
-                  }`}
-                >
-                  {count} {count === 1 ? 'occurrence' : 'occurrences'}
-                </span>
-              </div>
-            );
-          })}
+                  <span
+                    className={`font-mono font-bold px-3 py-1 rounded-full text-xs text-right whitespace-nowrap ${
+                      count !== null && count > 0 ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30' : 'text-zinc-600 bg-zinc-900/60'
+                    }`}
+                  >
+                    {count !== null ? `${count} ${count === 1 ? 'occurrence' : 'occurrences'}` : '—'}
+                  </span>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>

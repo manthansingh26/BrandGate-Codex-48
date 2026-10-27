@@ -97,28 +97,28 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-20 space-y-16">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-20 space-y-8 sm:space-y-16">
       {/* Hero Header */}
-      <div className="text-center space-y-6 max-w-4xl mx-auto">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-teal-500/25 bg-teal-500/10 text-teal-300 text-[11px] font-semibold tracking-wide uppercase shadow-sm">
+      <div className="flex flex-col items-center text-center space-y-3.5 sm:space-y-6 max-w-4xl mx-auto">
+        <div className="order-1 inline-flex items-center gap-2 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full border border-teal-500/25 bg-teal-500/10 text-teal-300 text-[10px] sm:text-[11px] font-semibold tracking-wide uppercase shadow-sm">
           <ShieldCheck className="h-3.5 w-3.5 text-teal-400" />
           Pre-Publication Brand Governance Gate
         </div>
 
-        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.08]">
+        <h1 className="order-2 text-3xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.12] sm:leading-[1.08]">
           Protect Your Brand <br className="hidden sm:inline" />
           <span className="bg-gradient-to-r from-teal-400 via-teal-300 to-cyan-300 bg-clip-text text-transparent">
             Before It Goes Public.
           </span>
         </h1>
 
-        <p className="text-base sm:text-lg text-[#A2B0BD] font-normal max-w-2xl mx-auto leading-relaxed">
+        <p className="order-3 text-xs sm:text-base lg:text-lg text-[#A2B0BD] font-normal max-w-2xl mx-auto leading-relaxed">
           The intelligent governance gate that halts pricing discrepancies, unsubstantiated rank superlatives, and accessibility defects before customer exposure.
         </p>
 
-        {/* Double-Bezel Guarantee Card */}
-        <div className="double-bezel max-w-xl mx-auto text-left sm:text-center mt-6">
-          <div className="double-bezel-inner p-6 sm:p-7 relative overflow-hidden">
+        {/* Double-Bezel Guarantee Card — order-5 on narrow mobile so CTA is above fold; sm:order-4 on desktop */}
+        <div className="order-5 sm:order-4 double-bezel max-w-xl mx-auto text-left sm:text-center mt-3 sm:mt-6 w-full">
+          <div className="double-bezel-inner p-5 sm:p-7 relative overflow-hidden">
             <div className="absolute top-0 right-0 -mr-12 -mt-12 w-32 h-32 rounded-full bg-teal-500/10 blur-2xl pointer-events-none"></div>
             <div className="flex items-center justify-start sm:justify-center gap-2 mb-2">
               <span className="h-2 w-2 rounded-full bg-teal-400 animate-pulse"></span>
@@ -126,7 +126,7 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
                 Core Governance Guarantee
               </span>
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            <div className="text-xl sm:text-3xl font-black text-white tracking-tight">
               "No citation, no flag."
             </div>
             <p className="text-xs sm:text-sm text-[#A2B0BD] mt-2 leading-relaxed">
@@ -135,12 +135,12 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
           </div>
         </div>
 
-        {/* Call to Action Buttons with Button-in-Button Architecture */}
-        <div className="pt-2 flex flex-wrap items-center justify-center gap-4">
+        {/* Call to Action Buttons — order-4 on narrow mobile (above fold); sm:order-5 on desktop */}
+        <div className="order-4 sm:order-5 pt-1 sm:pt-2 flex flex-wrap items-center justify-center gap-4">
           <button
             onClick={handleTryDemoDraft}
             disabled={loading}
-            className="btn-primary-micro group inline-flex items-center justify-center gap-3 pl-7 pr-2.5 py-2.5 rounded-full bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-sm shadow-xl shadow-teal-500/20 active:scale-[0.98] transition-all duration-200 disabled:opacity-50"
+            className="btn-primary-micro group inline-flex items-center justify-center gap-3 pl-7 pr-2.5 py-2.5 rounded-full bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-sm shadow-xl shadow-teal-500/20 disabled:opacity-50"
           >
             {loading ? (
               <span className="flex items-center gap-2 py-1 pr-4">
@@ -160,7 +160,7 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
           {onNavigateToVault && (
             <button
               onClick={onNavigateToVault}
-              className="btn-secondary-micro inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-zinc-900/90 hover:bg-zinc-850 text-zinc-300 hover:text-white border border-zinc-800 text-sm font-semibold transition-all duration-200 active:scale-[0.98]"
+              className="btn-secondary-micro inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-zinc-900/90 hover:bg-zinc-850 text-zinc-300 hover:text-white border border-zinc-800 text-sm font-semibold"
             >
               <BookOpen className="h-4 w-4 text-zinc-400" />
               Explore Brand Vault
@@ -169,28 +169,28 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
         </div>
 
         {error && (
-          <p className="text-xs sm:text-sm text-red-400 bg-red-950/40 border border-red-900/60 p-3 rounded-xl max-w-md mx-auto">
+          <p className="order-6 text-xs sm:text-sm text-red-400 bg-red-950/40 border border-red-900/60 p-3 rounded-xl max-w-md mx-auto">
             {error}
           </p>
         )}
       </div>
 
       {/* Proof / Verification Metrics Strip (Linear-Style Ground Truth) */}
-      <div className="pt-10 border-t border-[#1B2732] grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+      <div className="pt-8 sm:pt-10 border-t border-[#1B2732] grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
         <div className="feature-card-micro p-4 rounded-2xl bg-[#0B1118]/80 border border-white/[0.05]">
-          <div className="text-2xl font-black text-white font-mono">4 Categories</div>
+          <div className="text-xl sm:text-2xl font-black text-white font-mono">4 Categories</div>
           <div className="text-[11px] text-zinc-400 mt-1 uppercase tracking-wider font-semibold">Facts • Rules • Terms • Palette</div>
         </div>
         <div className="feature-card-micro p-4 rounded-2xl bg-[#0B1118]/80 border border-white/[0.05]">
-          <div className="text-2xl font-black text-teal-400 font-mono">0 Uncited</div>
+          <div className="text-xl sm:text-2xl font-black text-teal-400 font-mono">0 Uncited by design</div>
           <div className="text-[11px] text-zinc-400 mt-1 uppercase tracking-wider font-semibold">Strict Evidence Filter</div>
         </div>
         <div className="feature-card-micro p-4 rounded-2xl bg-[#0B1118]/80 border border-white/[0.05]">
-          <div className="text-2xl font-black text-emerald-400 font-mono">Deterministic</div>
+          <div className="text-xl sm:text-2xl font-black text-emerald-400 font-mono">Deterministic</div>
           <div className="text-[11px] text-zinc-400 mt-1 uppercase tracking-wider font-semibold">Server Verification Gate</div>
         </div>
         <div className="feature-card-micro p-4 rounded-2xl bg-[#0B1118]/80 border border-white/[0.05]">
-          <div className="text-2xl font-black text-[#5AF0D1] font-mono">Advisory AI</div>
+          <div className="text-xl sm:text-2xl font-black text-[#5AF0D1] font-mono">Advisory AI</div>
           <div className="text-[11px] text-zinc-400 mt-1 uppercase tracking-wider font-semibold">Grounded Gemini Layer</div>
         </div>
       </div>
@@ -260,7 +260,7 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
           <span className="hidden sm:inline">•</span>
           <span>Deterministic Primary Gate</span>
           <span className="hidden sm:inline">•</span>
-          <span className="text-teal-400">Zero Hallucinations</span>
+          <span className="text-teal-400">Zero hallucinations by design: deterministic gate first, AI advisory only</span>
         </div>
       </div>
 

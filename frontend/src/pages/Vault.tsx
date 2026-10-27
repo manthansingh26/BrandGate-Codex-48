@@ -11,6 +11,7 @@ interface VaultProps {
 export const Vault: React.FC<VaultProps> = ({ activeBrand, currentUserEmail }) => {
   const isGuest = !currentUserEmail;
   const [vault, setVault] = useState<GroupedVault>({ fact: [], rule: [], terminology: [], palette: [] });
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export const Vault: React.FC<VaultProps> = ({ activeBrand, currentUserEmail }) =
     try {
       const data = await api.getVault(brandId);
       setVault(data);
+      setHasLoadedOnce(true);
     } catch (err: any) {
       setError(err.message || 'Failed to load vault items');
     } finally {
@@ -188,11 +190,11 @@ export const Vault: React.FC<VaultProps> = ({ activeBrand, currentUserEmail }) =
         {/* Category Filter Tabs */}
         <div className="flex flex-wrap items-center gap-1.5 p-1 bg-zinc-950/80 rounded-xl border border-zinc-800">
           {[
-            { id: 'all', label: 'All Items', count: totalCount },
-            { id: 'fact', label: 'Facts', count: vault.fact.length },
-            { id: 'rule', label: 'Rules', count: vault.rule.length },
-            { id: 'terminology', label: 'Terminology', count: vault.terminology.length },
-            { id: 'palette', label: 'Palette', count: vault.palette.length },
+            { id: 'all', label: 'All Items', count: hasLoadedOnce ? totalCount : '—' },
+            { id: 'fact', label: 'Facts', count: hasLoadedOnce ? vault.fact.length : '—' },
+            { id: 'rule', label: 'Rules', count: hasLoadedOnce ? vault.rule.length : '—' },
+            { id: 'terminology', label: 'Terminology', count: hasLoadedOnce ? vault.terminology.length : '—' },
+            { id: 'palette', label: 'Palette', count: hasLoadedOnce ? vault.palette.length : '—' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -542,6 +544,15 @@ const VaultCard: React.FC<VaultCardProps> = ({
         </div>
 
         <h3 className="text-base font-bold text-white tracking-tight">{item.title}</h3>
+
+        {item.item_id === 'T-04' && (
+          <div className="mt-2 p-2.5 rounded-xl bg-amber-950/40 border border-amber-800/60 text-xs text-amber-300 flex items-start gap-2">
+            <Info className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
+            <span>
+              <strong>Seeded phrase notice:</strong> Subject to evidence substantiation. BrandGate requires verified substantiation before numeric audience claims ("millions") can be cited as factual assertions.
+            </span>
+          </div>
+        )}
 
         {!isEditing ? (
           <p className="text-xs sm:text-sm text-zinc-300 mt-2 leading-relaxed bg-black/40 p-3 rounded-xl border border-zinc-800/80 font-mono">

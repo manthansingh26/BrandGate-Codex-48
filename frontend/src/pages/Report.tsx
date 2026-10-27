@@ -12,6 +12,7 @@ interface ReportProps {
   onNavigateToReview: () => void;
   onNavigateToSubmit?: () => void;
   apiStatus: ApiConnectionStatus;
+  isRestoringDraft?: boolean;
 }
 
 export const Report: React.FC<ReportProps> = ({
@@ -22,9 +23,11 @@ export const Report: React.FC<ReportProps> = ({
   onNavigateToReview,
   onNavigateToSubmit,
   apiStatus,
+  isRestoringDraft,
 }) => {
   const [applyingFixId, setApplyingFixId] = useState<string | null>(null);
   const [applyFixElapsed, setApplyFixElapsed] = useState<number>(0);
+  const [isAiReviewUpdating, setIsAiReviewUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -43,6 +46,16 @@ export const Report: React.FC<ReportProps> = ({
   }, [applyingFixId]);
 
   if (!draft) {
+    if (isRestoringDraft) {
+      return (
+        <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-4">
+          <div className="inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-zinc-900/80 border border-teal-500/30 text-teal-300 text-sm font-medium">
+            <RefreshCw className="h-4 w-4 animate-spin text-teal-400" />
+            Restoring draft session from BrandGate backend...
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-4">
         <p className="text-zinc-400 text-sm">Draft not found — start a new demo draft</p>
@@ -53,7 +66,7 @@ export const Report: React.FC<ReportProps> = ({
               window.dispatchEvent(new PopStateEvent('popstate'));
             }
           }}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs transition-colors"
+          className="btn-primary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs"
         >
           Return to Home
         </button>
@@ -68,17 +81,66 @@ export const Report: React.FC<ReportProps> = ({
 
     try {
       if (apiStatus === 'connected') {
-        await api.applyFix(draft.id, finding.id);
-        const reviewRes = await api.reviewDraft(draft.id);
-        const updatedDraft = await api.getDraft(draft.id);
-        onDraftUpdated(updatedDraft, reviewRes.findings, reviewRes.llm_review);
+        setIsAiReviewUpdating(true);
+        // Call backend deterministic fix
+        const fixRes = await api.applyFix(draft.id, finding.id);
+        const receiptTime = new Date().toISOString();
+
+        // Immediate deterministic version creation from response
+        const remainingFindings = findings.filter((f) => f.id !== finding.id);
+        const newVersionNo = fixRes.version_no || (draft.current_version + 1);
+        const newBody = fixRes.body_text;
+
+        const immediateDraft: Draft = {
+          ...draft,
+          body_text: newBody,
+          current_version: newVersionNo,
+          status: (fixRes.status as any) || draft.status,
+          versions: [
+            ...(draft.versions || []),
+            {
+              version_no: newVersionNo,
+              body_text: newBody,
+              alt_text: draft.alt_text,
+              created_at: receiptTime,
+            },
+          ],
+        };
+
+        // Render deterministic new version immediately, keeping previous AI review count
+        onDraftUpdated(immediateDraft, remainingFindings, llmReview);
+
+        // Run re-review in background
+        try {
+          const reviewRes = await api.reviewDraft(draft.id);
+          const updatedDraft = await api.getDraft(draft.id);
+          // Sync versions so receipt timestamp remains aligned
+          const synchronizedDraft: Draft = {
+            ...updatedDraft,
+            versions:
+              updatedDraft.versions && updatedDraft.versions.length >= (immediateDraft.versions?.length || 0)
+                ? updatedDraft.versions
+                : immediateDraft.versions,
+          };
+          onDraftUpdated(synchronizedDraft, reviewRes.findings, reviewRes.llm_review);
+        } catch (pollErr) {
+          console.warn('Background AI re-review poll deferred, deterministic version authoritative:', pollErr);
+        } finally {
+          setIsAiReviewUpdating(false);
+        }
       } else {
         let newBody = draft.body_text;
         if (finding.citation_id === 'F-12' || finding.suggested_fix.includes('Rs.')) {
           newBody = newBody.replace(/(?:Rs\.?|INR|₹)\s*[\d,]+/gi, finding.suggested_fix);
-        } else if (finding.citation_id === 'R-04' && (finding.explanation.toLowerCase().includes('no. 1') || finding.suggested_fix === 'trusted')) {
+        } else if (
+          finding.citation_id === 'R-04' &&
+          (finding.explanation.toLowerCase().includes('no. 1') || finding.suggested_fix === 'trusted')
+        ) {
           newBody = newBody.replace(/India['’]?s\s+No\.?\s*1|No\.?\s*1/gi, 'trusted');
-        } else if (finding.citation_id === 'R-04' && (finding.explanation.toLowerCase().includes('clinically') || finding.suggested_fix === 'certified quality')) {
+        } else if (
+          finding.citation_id === 'R-04' &&
+          (finding.explanation.toLowerCase().includes('clinically') || finding.suggested_fix === 'certified quality')
+        ) {
           newBody = newBody.replace(/clinically\s+proven/gi, 'certified quality');
         } else if (finding.suggested_fix) {
           const match = finding.explanation.match(/Claim\s+['"](.*?)['"]\s+is/);
@@ -104,12 +166,13 @@ export const Report: React.FC<ReportProps> = ({
         };
 
         const localNewFindings = runLocalDemoReview(newBody, draft.alt_text, draft.image_url);
-        onDraftUpdated(localUpdatedDraft, localNewFindings);
+        onDraftUpdated(localUpdatedDraft, localNewFindings, llmReview);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to apply fix');
     } finally {
       setApplyingFixId(null);
+      setIsAiReviewUpdating(false);
     }
   };
 
@@ -136,7 +199,7 @@ export const Report: React.FC<ReportProps> = ({
 
         <button
           onClick={onNavigateToReview}
-          className="btn-primary-micro inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-sm shadow-lg shadow-teal-500/20 active:scale-95 transition-all"
+          className="btn-primary-micro inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-sm shadow-lg shadow-teal-500/20"
         >
           Proceed to Approval Workflow
           <ArrowRight className="h-4 w-4" />
@@ -336,25 +399,29 @@ export const Report: React.FC<ReportProps> = ({
 
       {/* Grounded AI Review Panel (Secondary Advisory Layer) */}
       <div className="glass-card p-6 sm:p-7 rounded-2xl border border-teal-500/20 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-zinc-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-zinc-800">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-400">
+            <div className="p-2 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-400">
               <Bot className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                Grounded AI Compliance Review
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
-                  gemini-3.5-flash-lite
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-base font-bold text-white">Secondary Advisory Intelligence</h3>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-300 border border-amber-500/25">
+                  Advisory only — unapproved alternative, not the Approved Replacement
                 </span>
-              </h3>
-              <p className="text-xs text-zinc-400">
-                Advisory intelligence grounded exclusively in retrieved active vault records.
+              </div>
+              <p className="text-xs text-zinc-400 mt-1">
+                Model exploratory recommendations powered by Google Gemini (gemini-2.5-flash-lite). Never overrides authoritative Brand Vault deterministic gate.
               </p>
             </div>
           </div>
           <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-teal-400">
-            {draft.status === 'draft' || !llmReview ? 'Pending Draft Review' : (llmReview?.status || 'Advisory Layer Active')}
+            {draft.status === 'draft' || !llmReview
+              ? 'Pending Draft Review'
+              : isAiReviewUpdating
+              ? 'Updating...'
+              : llmReview?.status || 'Advisory Layer Active'}
           </span>
         </div>
 
@@ -363,31 +430,45 @@ export const Report: React.FC<ReportProps> = ({
           <p className="text-xs text-zinc-400 leading-relaxed">
             AI compliance review has not run yet. Run Review Draft on the Submit page to generate grounded advisory intelligence.
           </p>
+        ) : isAiReviewUpdating ? (
+          <div className="p-4 rounded-xl bg-teal-950/20 border border-teal-500/30 flex items-center gap-3 text-xs text-teal-300">
+            <RefreshCw className="h-4 w-4 animate-spin text-teal-400" />
+            <span>Deterministic fix applied — AI review updating in background...</span>
+          </div>
         ) : aiFindings.length > 0 ? (
           <div className="space-y-3">
             {aiFindings.map((f, i) => (
-              <div key={i} className="row-hover-micro p-4 rounded-xl bg-black/40 border border-zinc-800 flex items-start justify-between gap-4">
+              <div
+                key={i}
+                className="row-hover-micro p-4 rounded-xl bg-black/40 border border-zinc-800 flex flex-wrap sm:flex-nowrap items-start justify-between gap-4"
+              >
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-teal-500/10 text-teal-300 border border-teal-500/20">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/10 text-sky-300 border border-sky-500/20">
                       Grounded in {f.citation_id}
                     </span>
                     <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">{f.lane}</span>
+                    <span className="text-[10px] text-amber-400/90 font-mono">(Advisory Only)</span>
                   </div>
                   <p className="text-xs text-zinc-200 leading-relaxed">{f.explanation}</p>
                 </div>
                 {f.suggested_fix && (
-                  <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-teal-400 whitespace-nowrap">
-                    Fix: {f.suggested_fix}
-                  </span>
+                  <div className="flex flex-col sm:items-end gap-1 flex-shrink-0">
+                    <span className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold">
+                      AI Alternative (Unapproved):
+                    </span>
+                    <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded bg-zinc-900 border border-zinc-700 text-zinc-300 whitespace-nowrap">
+                      {f.suggested_fix}
+                    </span>
+                  </div>
                 )}
               </div>
             ))}
           </div>
         ) : (
           <p className="text-xs text-zinc-400 leading-relaxed">
-            {llmReview?.reason
-              ? `AI review status: ${llmReview.status} (${llmReview.reason}). Deterministic review remains fully authoritative.`
+            {llmReview?.status === 'timeout' || llmReview?.reason?.toLowerCase().includes('timeout')
+              ? 'Advisory AI review timed out on background re-evaluation. Deterministic review remains fully authoritative.'
               : 'Grounded LLM review detected no additional secondary compliance risks.'}
           </p>
         )}
@@ -431,9 +512,9 @@ const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applying
         </div>
         <p className="text-sm text-zinc-200 leading-relaxed font-sans">{finding.explanation}</p>
         {finding.suggested_fix && (
-          <div className="text-xs font-mono text-zinc-400 flex items-center gap-1.5 pt-1">
-            <span className="text-zinc-500 font-sans">Approved Replacement:</span>
-            <span className="px-2 py-0.5 rounded bg-black/60 border border-zinc-800 text-teal-400 font-bold">
+          <div className="text-xs font-mono text-zinc-400 flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-teal-400 font-semibold font-sans">Approved Replacement (Authoritative):</span>
+            <span className="px-2 py-0.5 rounded bg-black/60 border border-teal-500/30 text-teal-300 font-bold">
               "{finding.suggested_fix}"
             </span>
           </div>
@@ -444,7 +525,7 @@ const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applying
         <button
           onClick={() => onApplyFix(finding)}
           disabled={applyingFixId !== null}
-          className="btn-primary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs shadow-md shadow-teal-500/20 active:scale-95 transition-all disabled:opacity-50"
+          className="btn-primary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs shadow-md shadow-teal-500/20 disabled:opacity-50"
         >
           {isApplying ? (
             <>

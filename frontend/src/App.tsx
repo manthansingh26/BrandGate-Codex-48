@@ -39,15 +39,36 @@ export const App: React.FC = () => {
 
   const [apiStatus, setApiStatus] = useState<ApiConnectionStatus>('waking');
   const [wakingElapsed, setWakingElapsed] = useState<number>(0);
-  const [userRole, setUserRole] = useState<UserRole>('creator');
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [activeBrand, setActiveBrand] = useState<Brand | null>(null);
 
-  // Restore draft state from sessionStorage across browser reloads
+  // Persona persistence in shared localStorage across browser reloads
+  const [userRole, setUserRole] = useState<UserRole>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedRole = localStorage.getItem('brandgate_user_role');
+        if (savedRole === 'reviewer' || savedRole === 'creator') {
+          return savedRole;
+        }
+      } catch {}
+    }
+    return 'creator';
+  });
+
+  const handleRoleChange = (role: UserRole) => {
+    setUserRole(role);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('brandgate_user_role', role);
+      } catch {}
+    }
+  };
+
+  // Restore draft state from shared localStorage across browser tabs & reloads
   const [activeDraft, setActiveDraft] = useState<Draft | null>(() => {
     if (typeof window !== 'undefined') {
       try {
-        const saved = sessionStorage.getItem('brandgate_active_draft');
+        const saved = localStorage.getItem('brandgate_active_draft') || sessionStorage.getItem('brandgate_active_draft');
         return saved ? JSON.parse(saved) : null;
       } catch {
         return null;
@@ -59,7 +80,7 @@ export const App: React.FC = () => {
   const [draftFindings, setDraftFindings] = useState<Finding[]>(() => {
     if (typeof window !== 'undefined') {
       try {
-        const saved = sessionStorage.getItem('brandgate_draft_findings');
+        const saved = localStorage.getItem('brandgate_draft_findings') || sessionStorage.getItem('brandgate_draft_findings');
         return saved ? JSON.parse(saved) : [];
       } catch {
         return [];
@@ -71,7 +92,7 @@ export const App: React.FC = () => {
   const [llmReviewResult, setLlmReviewResult] = useState<any | null>(() => {
     if (typeof window !== 'undefined') {
       try {
-        const saved = sessionStorage.getItem('brandgate_llm_review');
+        const saved = localStorage.getItem('brandgate_llm_review') || sessionStorage.getItem('brandgate_llm_review');
         return saved ? JSON.parse(saved) : null;
       } catch {
         return null;
@@ -79,6 +100,46 @@ export const App: React.FC = () => {
     }
     return null;
   });
+
+  const [isRestoringDraft, setIsRestoringDraft] = useState<boolean>(false);
+
+  // Restore draft from backend on fresh tab / deep link (/report or /review)
+  useEffect(() => {
+    const restoreDraftFromBackend = async () => {
+      if (typeof window === 'undefined') return;
+      const savedDraftId = localStorage.getItem('brandgate_active_draft_id');
+      if (!savedDraftId) return;
+
+      if (!activeDraft) {
+        setIsRestoringDraft(true);
+        try {
+          const fetchedDraft = await api.getDraft(savedDraftId);
+          setActiveDraft(fetchedDraft);
+          localStorage.setItem('brandgate_active_draft', JSON.stringify(fetchedDraft));
+
+          if (fetchedDraft.status !== 'draft') {
+            const reviewRes = await api.reviewDraft(fetchedDraft.id);
+            setDraftFindings(reviewRes.findings || []);
+            setLlmReviewResult(reviewRes.llm_review || null);
+            localStorage.setItem('brandgate_draft_findings', JSON.stringify(reviewRes.findings || []));
+            if (reviewRes.llm_review) {
+              localStorage.setItem('brandgate_llm_review', JSON.stringify(reviewRes.llm_review));
+            }
+          }
+        } catch (err) {
+          console.warn('Could not restore draft from shared backend ID:', err);
+          localStorage.removeItem('brandgate_active_draft_id');
+          localStorage.removeItem('brandgate_active_draft');
+        } finally {
+          setIsRestoringDraft(false);
+        }
+      }
+    };
+
+    if (apiStatus === 'connected') {
+      restoreDraftFromBackend();
+    }
+  }, [apiStatus]);
 
   // HTML5 History API popstate synchronization (Back / Forward buttons)
   useEffect(() => {
@@ -182,6 +243,10 @@ export const App: React.FC = () => {
     setLlmReviewResult(null);
     if (typeof window !== 'undefined') {
       try {
+        localStorage.setItem('brandgate_active_draft_id', draft.id);
+        localStorage.setItem('brandgate_active_draft', JSON.stringify(draft));
+        localStorage.removeItem('brandgate_draft_findings');
+        localStorage.removeItem('brandgate_llm_review');
         sessionStorage.setItem('brandgate_active_draft', JSON.stringify(draft));
         sessionStorage.removeItem('brandgate_draft_findings');
         sessionStorage.removeItem('brandgate_llm_review');
@@ -196,6 +261,14 @@ export const App: React.FC = () => {
     setLlmReviewResult(llmReview || null);
     if (typeof window !== 'undefined') {
       try {
+        localStorage.setItem('brandgate_active_draft_id', draft.id);
+        localStorage.setItem('brandgate_active_draft', JSON.stringify(draft));
+        localStorage.setItem('brandgate_draft_findings', JSON.stringify(findings));
+        if (llmReview) {
+          localStorage.setItem('brandgate_llm_review', JSON.stringify(llmReview));
+        } else {
+          localStorage.removeItem('brandgate_llm_review');
+        }
         sessionStorage.setItem('brandgate_active_draft', JSON.stringify(draft));
         sessionStorage.setItem('brandgate_draft_findings', JSON.stringify(findings));
         if (llmReview) {
@@ -210,6 +283,8 @@ export const App: React.FC = () => {
     setActiveDraft(draft);
     if (typeof window !== 'undefined') {
       try {
+        localStorage.setItem('brandgate_active_draft_id', draft.id);
+        localStorage.setItem('brandgate_active_draft', JSON.stringify(draft));
         sessionStorage.setItem('brandgate_active_draft', JSON.stringify(draft));
       } catch {}
     }
@@ -217,6 +292,7 @@ export const App: React.FC = () => {
       setDraftFindings(findings);
       if (typeof window !== 'undefined') {
         try {
+          localStorage.setItem('brandgate_draft_findings', JSON.stringify(findings));
           sessionStorage.setItem('brandgate_draft_findings', JSON.stringify(findings));
         } catch {}
       }
@@ -225,7 +301,13 @@ export const App: React.FC = () => {
       setLlmReviewResult(llmReview);
       if (typeof window !== 'undefined') {
         try {
-          sessionStorage.setItem('brandgate_llm_review', JSON.stringify(llmReview));
+          if (llmReview) {
+            localStorage.setItem('brandgate_llm_review', JSON.stringify(llmReview));
+            sessionStorage.setItem('brandgate_llm_review', JSON.stringify(llmReview));
+          } else {
+            localStorage.removeItem('brandgate_llm_review');
+            sessionStorage.removeItem('brandgate_llm_review');
+          }
         } catch {}
       }
     }
@@ -242,7 +324,7 @@ export const App: React.FC = () => {
           setActiveTab={navigateToTab}
           apiStatus={apiStatus}
           userRole={userRole}
-          setUserRole={setUserRole}
+          setUserRole={handleRoleChange}
           currentUserEmail={currentUserEmail}
           onSignOut={handleSignOut}
           onRefreshHealth={initApp}
@@ -278,6 +360,7 @@ export const App: React.FC = () => {
               onNavigateToReview={() => navigateToTab('review')}
               onNavigateToSubmit={() => navigateToTab('submit')}
               apiStatus={apiStatus}
+              isRestoringDraft={isRestoringDraft}
             />
           )}
           {activeTab === 'review' && (
@@ -286,7 +369,8 @@ export const App: React.FC = () => {
               findings={draftFindings}
               userRole={userRole}
               onDraftUpdated={handleDraftUpdated}
-              onRoleChange={setUserRole}
+              onRoleChange={handleRoleChange}
+              isRestoringDraft={isRestoringDraft}
             />
           )}
           {activeTab === 'insights' && (

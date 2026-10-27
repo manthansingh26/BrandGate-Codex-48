@@ -23,9 +23,10 @@ interface ReviewProps {
   userRole: UserRole;
   onDraftUpdated: (draft: Draft) => void;
   onRoleChange?: (role: UserRole) => void;
+  isRestoringDraft?: boolean;
 }
 
-export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDraftUpdated, onRoleChange }) => {
+export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDraftUpdated, onRoleChange, isRestoringDraft }) => {
   const [commentText, setCommentText] = useState('');
   const [changesComment, setChangesComment] = useState('');
   const [showChangesModal, setShowChangesModal] = useState(false);
@@ -33,6 +34,16 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
   const [error, setError] = useState<string | null>(null);
 
   if (!draft) {
+    if (isRestoringDraft) {
+      return (
+        <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-4">
+          <div className="inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-zinc-900/80 border border-teal-500/30 text-teal-300 text-sm font-medium">
+            <Loader2 className="h-4 w-4 animate-spin text-teal-400" />
+            Restoring draft session from BrandGate backend...
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-4">
         <p className="text-zinc-400 text-sm">Draft not found — start a new demo draft</p>
@@ -236,9 +247,10 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
                   ? 'Draft must be pending approval'
                   : 'Approve draft for publication'
               }
-              className="btn-primary-micro px-6 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black text-xs font-extrabold shadow-lg shadow-teal-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="btn-primary-micro inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black text-xs font-extrabold shadow-lg shadow-teal-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Demo Reviewer Approve'}
+              {actionLoading && <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />}
+              <span>Demo Reviewer Approve</span>
             </button>
           )}
 

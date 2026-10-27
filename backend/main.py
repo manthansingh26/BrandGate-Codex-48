@@ -2,6 +2,7 @@ import os
 import re
 import uuid
 import logging
+import concurrent.futures
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, status, Query, Request
@@ -33,6 +34,10 @@ logger = logging.getLogger("brandgate.api")
 load_dotenv(override=True)
 
 DEMO_BRAND_ID = "00000000-0000-0000-0000-000000000001"
+
+# Thread pool executor and persistent cache for grounded LLM reviews (B1 decoupling & timeout protection)
+_LLM_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+_DRAFT_LAST_LLM_REVIEW: Dict[str, Dict[str, Any]] = {}
 
 app = FastAPI(
     title="BrandGate API",
@@ -643,15 +648,50 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
         "status": "checked"
     }).eq("id", draft_id).execute()
 
-    # Run Grounded LLM Review (Addition to deterministic review, strictly isolated)
-    llm_result = run_grounded_llm_review(
-        body_text=draft.get("body_text", ""),
-        alt_text=draft.get("alt_text"),
-        image_url=draft.get("image_url"),
-        active_vault_items=active_vault_items,
-        brand_id=draft.get("brand_id"),
-        timeout_seconds=60.0
-    )
+    # Run Grounded LLM Review asynchronously with a strict 4.0s timeout gate
+    def _execute_llm():
+        return run_grounded_llm_review(
+            body_text=draft.get("body_text", ""),
+            alt_text=draft.get("alt_text"),
+            image_url=draft.get("image_url"),
+            active_vault_items=active_vault_items,
+            brand_id=draft.get("brand_id"),
+            timeout_seconds=4.0
+        )
+
+    llm_future = _LLM_EXECUTOR.submit(_execute_llm)
+    try:
+        llm_result = llm_future.result(timeout=4.0)
+    except concurrent.futures.TimeoutError:
+        logger.warning(f"[BrandGate Review] Gemini LLM review timed out after 4.0s for draft {draft_id}")
+        llm_result = {
+            "available": False,
+            "status": "timeout",
+            "reason": "timeout (strict 4.0s gate)",
+            "provider": "gemini",
+            "findings": []
+        }
+    except Exception as exc:
+        logger.warning(f"[BrandGate Review] Gemini LLM review failed for draft {draft_id}: {exc}")
+        llm_result = {
+            "available": False,
+            "status": "error",
+            "reason": str(exc),
+            "provider": "gemini",
+            "findings": []
+        }
+
+    # Preserve last successful LLM review state so AI counts never drop to 0 on timeout
+    if llm_result.get("status") == "success" and llm_result.get("findings"):
+        _DRAFT_LAST_LLM_REVIEW[draft_id] = llm_result
+    elif draft_id in _DRAFT_LAST_LLM_REVIEW and (not llm_result.get("findings") or llm_result.get("status") in ("timeout", "LLM review unavailable", "error")):
+        cached_review = _DRAFT_LAST_LLM_REVIEW[draft_id]
+        llm_result = {
+            **cached_review,
+            "cached": True,
+            "timeout_fallback": True,
+            "reason": llm_result.get("reason") or "preserved from prior review"
+        }
 
     return {
         "deterministic_findings": saved_findings,
