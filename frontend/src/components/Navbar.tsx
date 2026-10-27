@@ -184,9 +184,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {apiStatus === 'waking' && (
               <span className="flex items-center gap-1.5 text-amber-400 font-medium">
                 <RefreshCw className="h-3 w-3 animate-spin" />
-                {wakingElapsed !== undefined && wakingElapsed > 0
-                  ? `Waking up server... ${wakingElapsed}s elapsed, retrying...`
-                  : 'Waking up server... please wait, retrying...'}
+                {`Waking up server... ${wakingElapsed ?? 0}s elapsed, retrying...`}
               </span>
             )}
             {apiStatus === 'blocked_by_client' && (

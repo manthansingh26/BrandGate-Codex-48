@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../supabase';
 import { X, Mail, Lock, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 
@@ -17,14 +18,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
   const [error, setError] = useState<string | null>(null);
 
   const modalRef = useRef<HTMLDivElement>(null);
+  const emailInputRef = useRef<HTMLInputElement>(null);
   const previousActiveElement = useRef<HTMLElement | null>(null);
 
-  // Focus management: save opener focus and focus first element on open; restore on close
+  // Body scroll lock while modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
+
+  // Focus management: save opener focus and focus Email input on open; restore on close
   useEffect(() => {
     if (isOpen) {
       previousActiveElement.current = document.activeElement as HTMLElement;
       const timer = setTimeout(() => {
-        if (modalRef.current) {
+        if (emailInputRef.current) {
+          emailInputRef.current.focus();
+        } else if (modalRef.current) {
           const focusable = modalRef.current.querySelectorAll<HTMLElement>(
             'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
           );
@@ -41,7 +55,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
     }
   }, [isOpen]);
 
-  // Keyboard navigation: Escape key closes modal; Tab key is trapped inside modal
+  // Keyboard navigation: Escape key closes modal; Tab key traps focus inside modal
+  // Focus order: Email -> Password -> Sign In / Sign Up button -> Sign Up / Sign In toggle -> Close button -> back to Email
   useEffect(() => {
     if (!isOpen) return;
 
@@ -64,12 +79,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
         const lastElement = focusables[focusables.length - 1];
 
         if (e.shiftKey) {
-          if (document.activeElement === firstElement) {
+          if (document.activeElement === firstElement || !modalRef.current.contains(document.activeElement)) {
             e.preventDefault();
             lastElement.focus();
           }
         } else {
-          if (document.activeElement === lastElement) {
+          if (document.activeElement === lastElement || !modalRef.current.contains(document.activeElement)) {
             e.preventDefault();
             firstElement.focus();
           }
@@ -81,7 +96,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
@@ -156,28 +171,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
     }
   };
 
-  return (
+  const modalContent = (
     <div
       onClick={handleBackdropClick}
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto"
       aria-modal="true"
       role="dialog"
+      aria-labelledby="auth-modal-title"
     >
       <div
         ref={modalRef}
-        className="relative w-full max-w-md p-5 sm:p-6 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl my-auto max-h-[92vh] overflow-y-auto"
+        className="relative w-full max-w-md p-6 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl my-auto max-h-[92vh] overflow-y-auto focus-visible:outline-none"
       >
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close modal"
-          className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none z-10 transition-colors"
-        >
-          <X className="h-4 w-4" />
-        </button>
-
         <div className="mb-6 pr-8">
-          <h3 className="text-xl font-bold text-white">
+          <h3 id="auth-modal-title" className="text-xl font-bold text-white">
             {isSignUp ? 'Create Brand Account' : 'Sign in to BrandGate'}
           </h3>
           <p className="text-xs text-zinc-400 mt-1">
@@ -205,6 +212,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
             <div className="relative">
               <Mail className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
               <input
+                ref={emailInputRef}
                 type="email"
                 required
                 value={email}
@@ -247,7 +255,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
               <button
                 type="button"
                 onClick={() => setIsSignUp(false)}
-                className="text-teal-400 hover:underline font-medium focus-visible:ring-1 focus-visible:ring-teal-400 focus-visible:outline-none rounded px-1"
+                className="text-teal-400 hover:underline font-medium focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none rounded px-1"
               >
                 Sign In
               </button>
@@ -258,14 +266,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
               <button
                 type="button"
                 onClick={() => setIsSignUp(true)}
-                className="text-teal-400 hover:underline font-medium focus-visible:ring-1 focus-visible:ring-teal-400 focus-visible:outline-none rounded px-1"
+                className="text-teal-400 hover:underline font-medium focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none rounded px-1"
               >
                 Sign Up
               </button>
             </span>
           )}
         </div>
+
+        {/* Close button ordered after form & footer in DOM for natural Tab order */}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close modal"
+          className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none z-10 transition-colors"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };
+

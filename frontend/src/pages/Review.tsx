@@ -55,6 +55,11 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
   const isChecked = draft.status === 'checked';
   const isNeedsChanges = draft.status === 'needs_changes';
 
+  const openFindings = findings.filter(
+    (f) => f.lane === 'contradiction' || f.lane === 'evidence_needed'
+  );
+  const hasOpenFindings = openFindings.length > 0;
+
   // Request Approval
   const handleRequestApproval = async () => {
     setActionLoading(true);
@@ -72,6 +77,10 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
 
   // Approve Draft
   const handleApprove = async () => {
+    if (hasOpenFindings) {
+      setError('Cannot approve: open findings remain — apply fixes or request changes first.');
+      return;
+    }
     setActionLoading(true);
     setError(null);
     try {
@@ -204,15 +213,17 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
           {!isApproved && (
             <button
               onClick={handleApprove}
-              disabled={actionLoading || userRole !== 'reviewer' || !isPending}
+              disabled={actionLoading || userRole !== 'reviewer' || !isPending || hasOpenFindings}
               title={
-                userRole !== 'reviewer'
+                hasOpenFindings
+                  ? 'Cannot approve: open findings remain — apply fixes or request changes first.'
+                  : userRole !== 'reviewer'
                   ? 'Reviewer approval required (switch role to Reviewer)'
                   : !isPending
                   ? 'Draft must be pending approval'
                   : 'Approve draft for publication'
               }
-              className="px-6 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black text-xs font-extrabold shadow-lg shadow-teal-500/20 active:scale-95 transition-all disabled:opacity-40 disabled:hover:bg-teal-400 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
+              className="px-6 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black text-xs font-extrabold shadow-lg shadow-teal-500/20 active:scale-95 transition-all disabled:opacity-40 disabled:hover:bg-teal-400 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
             >
               {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Demo Reviewer Approve'}
             </button>
