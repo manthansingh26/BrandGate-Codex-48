@@ -334,6 +334,10 @@ def delete_vault_item(brand_id: str, item_id: str, request: Request = None):
 
 @app.post("/api/brands/{brand_id}/vault/reset-demo", summary="Restore seeded demo vault items")
 def reset_demo_vault(brand_id: str, request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+    check_brand_access(user, brand_id, write=True)
+
     # Enforce guest demo scoping: only the demo brand can be reset
     if brand_id != DEMO_BRAND_ID:
         raise HTTPException(
@@ -532,14 +536,21 @@ def get_draft(draft_id: str, request: Request = None):
             (d for d in reversed(draft["decisions"]) if d.get("decision") == "approve"),
             None
         )
+        brand_name = "Demo Brand (Seeded)"
+        if draft.get("brand_id") != DEMO_BRAND_ID:
+            b_res = supabase.table("brands").select("name").eq("id", draft["brand_id"]).execute()
+            if b_res.data and len(b_res.data) > 0:
+                brand_name = b_res.data[0].get("name", "Brand Vault")
+
         draft["approved_snapshot"] = {
             "locked": True,
+            "compliance_badge": "VERIFIED COMPLIANT",
             "approved_text": draft.get("body_text"),
             "image_reference": draft.get("image_url"),
             "alt_text": draft.get("alt_text"),
             "approver_role": approve_decision.get("role") if approve_decision else "reviewer",
             "timestamp": approve_decision.get("created_at") if approve_decision else draft.get("updated_at"),
-            "vault_version": f"vault-{draft['brand_id'][:8]}",
+            "vault_version": f"{brand_name} (Vault v1)",
         }
     else:
         draft["approved_snapshot"] = None
@@ -927,15 +938,41 @@ def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request 
         approver_role = "demo_reviewer"
         approver_id = None
 
+    # Check open findings for this draft and current version (Fix 1 Option A)
+    current_ver = draft.get("current_version", 1)
+    findings_res = (
+        supabase.table("findings")
+        .select("*")
+        .eq("draft_id", draft_id)
+        .eq("version_no", current_ver)
+        .execute()
+    )
+    open_findings = [
+        f for f in (findings_res.data or [])
+        if f.get("lane") in ["contradiction", "evidence_needed"]
+    ]
+    if open_findings:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot approve: open findings remain — apply fixes or request changes first."
+        )
+
     now_iso = datetime.now(timezone.utc).isoformat()
     supabase.table("drafts").update({
         "status": "approved",
         "updated_at": now_iso,
     }).eq("id", draft_id).execute()
 
-    vault_version_tag = f"vault-{draft['brand_id'][:8]}"
+    brand_name = "Demo Brand (Seeded)"
+    if draft.get("brand_id") != DEMO_BRAND_ID:
+        b_res = supabase.table("brands").select("name").eq("id", draft["brand_id"]).execute()
+        if b_res.data and len(b_res.data) > 0:
+            brand_name = b_res.data[0].get("name", "Brand Vault")
+
+    vault_version_tag = f"{brand_name} (Vault v1)"
     locked_snapshot = {
         "locked": True,
+        "compliance_badge": "VERIFIED COMPLIANT",
         "approved_text": draft.get("body_text"),
         "image_reference": draft.get("image_url"),
         "alt_text": draft.get("alt_text"),

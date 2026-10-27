@@ -12,6 +12,7 @@ interface NavbarProps {
   currentUserEmail: string | null;
   onSignOut: () => void;
   onRefreshHealth: () => void;
+  wakingElapsed?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -23,6 +24,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentUserEmail,
   onSignOut,
   onRefreshHealth,
+  wakingElapsed,
 }) => {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -40,7 +42,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           </span>
         </div>
         <div className="flex items-center gap-2 text-zinc-400">
-          <span className="hidden sm:inline">Demo roles — real accounts are a later improvement</span>
+          <span className="hidden sm:inline">
+            {currentUserEmail ? 'Role:' : 'Demo Persona (Guest):'}
+          </span>
           <div className="inline-flex rounded-md border border-zinc-800 p-0.5 bg-zinc-900">
             <button
               onClick={() => setUserRole('creator')}
@@ -180,7 +184,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             {apiStatus === 'waking' && (
               <span className="flex items-center gap-1.5 text-amber-400 font-medium">
                 <RefreshCw className="h-3 w-3 animate-spin" />
-                Waking up server... please wait, retrying...
+                {wakingElapsed !== undefined && wakingElapsed > 0
+                  ? `Waking up server... ${wakingElapsed}s elapsed, retrying...`
+                  : 'Waking up server... please wait, retrying...'}
               </span>
             )}
             {apiStatus === 'blocked_by_client' && (

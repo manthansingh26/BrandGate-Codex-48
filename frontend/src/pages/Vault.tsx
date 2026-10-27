@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Brand, GroupedVault, VaultItem } from '../types';
 import { api } from '../api/client';
-import { Plus, RefreshCw, Trash2, Edit2, Check, X, Palette, BookOpen, Search, Copy, CheckCircle2 } from 'lucide-react';
+import { Plus, RefreshCw, Trash2, Edit2, Check, X, Palette, BookOpen, Search, Copy, CheckCircle2, Info } from 'lucide-react';
 
 interface VaultProps {
   activeBrand: Brand | null;
+  currentUserEmail?: string | null;
 }
 
-export const Vault: React.FC<VaultProps> = ({ activeBrand }) => {
+export const Vault: React.FC<VaultProps> = ({ activeBrand, currentUserEmail }) => {
+  const isGuest = !currentUserEmail;
   const [vault, setVault] = useState<GroupedVault>({ fact: [], rule: [], terminology: [], palette: [] });
   const [loading, setLoading] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -149,23 +151,30 @@ export const Vault: React.FC<VaultProps> = ({ activeBrand }) => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsAdding(!isAdding)}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-sm shadow-md shadow-teal-500/20 active:scale-95 transition-all focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
-          >
-            <Plus className="h-4 w-4" />
-            Add Item
-          </button>
-          <button
-            onClick={handleResetDemo}
-            disabled={resetting}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-sm font-semibold transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
-          >
-            <RefreshCw className={`h-4 w-4 ${resetting ? 'animate-spin' : ''}`} />
-            Reset Demo Vault
-          </button>
-        </div>
+        {isGuest ? (
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-900/80 border border-zinc-800 text-xs text-zinc-400">
+            <Info className="h-4 w-4 text-teal-400 flex-shrink-0" />
+            <span>Guest demo: vault is read-only. Sign in to manage a brand vault.</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsAdding(!isAdding)}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-sm shadow-md shadow-teal-500/20 active:scale-95 transition-all focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
+            >
+              <Plus className="h-4 w-4" />
+              Add Item
+            </button>
+            <button
+              onClick={handleResetDemo}
+              disabled={resetting}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-sm font-semibold transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
+            >
+              <RefreshCw className={`h-4 w-4 ${resetting ? 'animate-spin' : ''}`} />
+              Reset Demo Vault
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -220,7 +229,7 @@ export const Vault: React.FC<VaultProps> = ({ activeBrand }) => {
       </div>
 
       {/* Add Item Form Modal */}
-      {isAdding && (
+      {!isGuest && isAdding && (
         <form onSubmit={handleCreate} className="glass-card p-6 sm:p-7 rounded-2xl border border-teal-500/30 space-y-4 shadow-2xl">
           <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -324,6 +333,7 @@ export const Vault: React.FC<VaultProps> = ({ activeBrand }) => {
                     setEditText={setEditText}
                     onSave={handleSaveEdit}
                     onDelete={handleDelete}
+                    isGuest={isGuest}
                   />
                 ))}
               </div>
@@ -352,6 +362,7 @@ export const Vault: React.FC<VaultProps> = ({ activeBrand }) => {
                     setEditText={setEditText}
                     onSave={handleSaveEdit}
                     onDelete={handleDelete}
+                    isGuest={isGuest}
                   />
                 ))}
               </div>
@@ -380,6 +391,7 @@ export const Vault: React.FC<VaultProps> = ({ activeBrand }) => {
                     setEditText={setEditText}
                     onSave={handleSaveEdit}
                     onDelete={handleDelete}
+                    isGuest={isGuest}
                   />
                 ))}
               </div>
@@ -450,6 +462,7 @@ interface VaultCardProps {
   setEditText: (txt: string) => void;
   onSave: (id: string) => void;
   onDelete: (id: string) => void;
+  isGuest?: boolean;
 }
 
 const VaultCard: React.FC<VaultCardProps> = ({
@@ -461,6 +474,7 @@ const VaultCard: React.FC<VaultCardProps> = ({
   setEditText,
   onSave,
   onDelete,
+  isGuest,
 }) => {
   const isEditing = editingItemId === item.item_id;
 
@@ -483,46 +497,48 @@ const VaultCard: React.FC<VaultCardProps> = ({
               {item.status}
             </span>
           </div>
-          <div className="flex items-center gap-1">
-            {!isEditing ? (
-              <>
-                <button
-                  onClick={() => {
-                    setEditingItemId(item.item_id);
-                    setEditText(item.text);
-                  }}
-                  className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
-                  title="Edit vault item"
-                >
-                  <Edit2 className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => onDelete(item.item_id)}
-                  className="p-1.5 text-zinc-400 hover:text-red-400 rounded-lg hover:bg-zinc-800 transition-colors"
-                  title="Delete vault item"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => onSave(item.item_id)}
-                  className="p-1.5 text-emerald-400 hover:text-emerald-300 rounded-lg hover:bg-zinc-800 transition-colors"
-                  title="Save edit"
-                >
-                  <Check className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => setEditingItemId(null)}
-                  className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
-                  title="Cancel edit"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </>
-            )}
-          </div>
+          {!isGuest && (
+            <div className="flex items-center gap-1">
+              {!isEditing ? (
+                <>
+                  <button
+                    onClick={() => {
+                      setEditingItemId(item.item_id);
+                      setEditText(item.text);
+                    }}
+                    className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+                    title="Edit vault item"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => onDelete(item.item_id)}
+                    className="p-1.5 text-zinc-400 hover:text-red-400 rounded-lg hover:bg-zinc-800 transition-colors"
+                    title="Delete vault item"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => onSave(item.item_id)}
+                    className="p-1.5 text-emerald-400 hover:text-emerald-300 rounded-lg hover:bg-zinc-800 transition-colors"
+                    title="Save edit"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setEditingItemId(null)}
+                    className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+                    title="Cancel edit"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         <h3 className="text-base font-bold text-white tracking-tight">{item.title}</h3>

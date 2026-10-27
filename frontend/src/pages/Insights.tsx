@@ -125,7 +125,7 @@ export const Insights: React.FC<InsightsProps> = ({ activeBrand }) => {
       <div className="glass-card p-6 sm:p-7 rounded-2xl border border-white/[0.08] space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
           <div>
-            <h3 className="text-base font-bold text-white tracking-tight">Active Findings Distribution by Vault Citation ID</h3>
+            <h3 className="text-base font-bold text-white tracking-tight">Findings Distribution by Vault Citation ID (Across all draft reviews)</h3>
             <p className="text-xs text-zinc-400 mt-0.5">Frequency of governance findings flagged against ground-truth rules.</p>
           </div>
           <span className="text-xs text-teal-400 font-mono font-semibold">Real PostgreSQL aggregation</span>

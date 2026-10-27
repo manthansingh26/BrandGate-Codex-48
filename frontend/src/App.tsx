@@ -10,17 +10,108 @@ import { Report } from './pages/Report';
 import { Review } from './pages/Review';
 import { Insights } from './pages/Insights';
 
-export const App: React.FC = () => {
+const pathToTab = (pathname: string): string => {
+  const clean = pathname.toLowerCase().replace(/\/+$/, '');
+  if (clean === '/vault') return 'vault';
+  if (clean === '/submit') return 'submit';
+  if (clean === '/report') return 'report';
+  if (clean === '/review') return 'review';
+  if (clean === '/insights') return 'insights';
+  return 'home';
+};
 
-  const [activeTab, setActiveTab] = useState<string>('home');
+const tabToPath = (tab: string): string => {
+  if (tab === 'vault') return '/vault';
+  if (tab === 'submit') return '/submit';
+  if (tab === 'report') return '/report';
+  if (tab === 'review') return '/review';
+  if (tab === 'insights') return '/insights';
+  return '/';
+};
+
+export const App: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return pathToTab(window.location.pathname);
+    }
+    return 'home';
+  });
+
   const [apiStatus, setApiStatus] = useState<ApiConnectionStatus>('waking');
+  const [wakingElapsed, setWakingElapsed] = useState<number>(0);
   const [userRole, setUserRole] = useState<UserRole>('creator');
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [activeBrand, setActiveBrand] = useState<Brand | null>(null);
-  const [activeDraft, setActiveDraft] = useState<Draft | null>(null);
-  const [draftFindings, setDraftFindings] = useState<Finding[]>([]);
-  const [llmReviewResult, setLlmReviewResult] = useState<any | null>(null);
 
+  // Restore draft state from sessionStorage across browser reloads
+  const [activeDraft, setActiveDraft] = useState<Draft | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('brandgate_active_draft');
+        return saved ? JSON.parse(saved) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  const [draftFindings, setDraftFindings] = useState<Finding[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('brandgate_draft_findings');
+        return saved ? JSON.parse(saved) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const [llmReviewResult, setLlmReviewResult] = useState<any | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem('brandgate_llm_review');
+        return saved ? JSON.parse(saved) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  // HTML5 History API popstate synchronization (Back / Forward buttons)
+  useEffect(() => {
+    const handlePopState = () => {
+      const tab = pathToTab(window.location.pathname);
+      setActiveTab(tab);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigateToTab = (tab: string) => {
+    setActiveTab(tab);
+    const targetPath = tabToPath(tab);
+    if (typeof window !== 'undefined' && window.location.pathname !== targetPath) {
+      window.history.pushState({ tab }, '', targetPath);
+    }
+  };
+
+  // Live elapsed timer for server waking / cold-start state
+  useEffect(() => {
+    let timer: any = null;
+    if (apiStatus === 'waking') {
+      timer = setInterval(() => {
+        setWakingElapsed((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setWakingElapsed(0);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [apiStatus]);
 
   // Initialize Supabase Auth listener
   useEffect(() => {
@@ -74,7 +165,6 @@ export const App: React.FC = () => {
         console.warn('Could not load brands from API:', err);
       }
     } else {
-
       setActiveBrand({
         id: '00000000-0000-0000-0000-000000000001',
         name: 'Demo Brand (Seeded)',
@@ -88,26 +178,54 @@ export const App: React.FC = () => {
 
   const handleDraftCreated = (draft: Draft) => {
     setActiveDraft(draft);
-    setActiveTab('submit');
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('brandgate_active_draft', JSON.stringify(draft));
+      } catch {}
+    }
+    navigateToTab('submit');
   };
 
   const handleReviewCompleted = (draft: Draft, findings: Finding[], llmReview?: any) => {
     setActiveDraft(draft);
     setDraftFindings(findings);
     setLlmReviewResult(llmReview || null);
-    setActiveTab('report');
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('brandgate_active_draft', JSON.stringify(draft));
+        sessionStorage.setItem('brandgate_draft_findings', JSON.stringify(findings));
+        if (llmReview) {
+          sessionStorage.setItem('brandgate_llm_review', JSON.stringify(llmReview));
+        }
+      } catch {}
+    }
+    navigateToTab('report');
   };
 
   const handleDraftUpdated = (draft: Draft, findings?: Finding[], llmReview?: any) => {
     setActiveDraft(draft);
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('brandgate_active_draft', JSON.stringify(draft));
+      } catch {}
+    }
     if (findings) {
       setDraftFindings(findings);
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.setItem('brandgate_draft_findings', JSON.stringify(findings));
+        } catch {}
+      }
     }
     if (llmReview !== undefined) {
       setLlmReviewResult(llmReview);
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.setItem('brandgate_llm_review', JSON.stringify(llmReview));
+        } catch {}
+      }
     }
   };
-
 
   return (
     <div className="min-h-screen bg-[#05070E] text-slate-100 flex flex-col font-sans bg-grid-pattern relative selection:bg-teal-400 selection:text-black">
@@ -117,13 +235,14 @@ export const App: React.FC = () => {
       <div className="relative z-10 flex flex-col min-h-screen">
         <Navbar
           activeTab={activeTab}
-          setActiveTab={setActiveTab}
+          setActiveTab={navigateToTab}
           apiStatus={apiStatus}
           userRole={userRole}
           setUserRole={setUserRole}
           currentUserEmail={currentUserEmail}
           onSignOut={handleSignOut}
           onRefreshHealth={initApp}
+          wakingElapsed={wakingElapsed}
         />
 
         <main className="flex-1">
@@ -131,11 +250,13 @@ export const App: React.FC = () => {
             <Home
               activeBrand={activeBrand}
               onDraftCreated={handleDraftCreated}
-              onNavigateToVault={() => setActiveTab('vault')}
+              onNavigateToVault={() => navigateToTab('vault')}
               apiStatus={apiStatus}
             />
           )}
-          {activeTab === 'vault' && <Vault activeBrand={activeBrand} />}
+          {activeTab === 'vault' && (
+            <Vault activeBrand={activeBrand} currentUserEmail={currentUserEmail} />
+          )}
           {activeTab === 'submit' && (
             <Submit
               currentDraft={activeDraft}
@@ -149,11 +270,10 @@ export const App: React.FC = () => {
               findings={draftFindings}
               llmReview={llmReviewResult}
               onDraftUpdated={handleDraftUpdated}
-              onNavigateToReview={() => setActiveTab('review')}
+              onNavigateToReview={() => navigateToTab('review')}
               apiStatus={apiStatus}
             />
           )}
-
           {activeTab === 'review' && (
             <Review
               draft={activeDraft}
@@ -170,6 +290,5 @@ export const App: React.FC = () => {
     </div>
   );
 };
-
 
 export default App;

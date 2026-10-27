@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { X, Mail, Lock, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 
@@ -16,7 +16,78 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
+
+  // Focus management: save opener focus and focus first element on open; restore on close
+  useEffect(() => {
+    if (isOpen) {
+      previousActiveElement.current = document.activeElement as HTMLElement;
+      const timer = setTimeout(() => {
+        if (modalRef.current) {
+          const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          );
+          if (focusable.length > 0) {
+            focusable[0].focus();
+          }
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    } else {
+      if (previousActiveElement.current && typeof previousActiveElement.current.focus === 'function') {
+        previousActiveElement.current.focus();
+      }
+    }
+  }, [isOpen]);
+
+  // Keyboard navigation: Escape key closes modal; Tab key is trapped inside modal
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusables = Array.from(
+          modalRef.current.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        );
+        if (focusables.length === 0) return;
+
+        const firstElement = focusables[0];
+        const lastElement = focusables[focusables.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,7 +112,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
 
         if (signUpErr) throw signUpErr;
 
-        // Check if user already exists (Supabase returns empty identities array when email is taken with confirm-email on)
         if (data.user && data.user.identities && data.user.identities.length === 0) {
           setError(
             'This email is already registered. Please click "Sign In" below or check your inbox if you need to confirm your email.'
@@ -53,7 +123,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
           onAuthSuccess(data.user?.email || email);
           onClose();
         } else if (data.user) {
-          // Email confirmation is enabled in Supabase Dashboard
           setMessage(
             'Account created! "Confirm email" is currently ON in your Supabase project. Please check your inbox to confirm your email, or disable "Confirm email" in Supabase Dashboard -> Authentication -> Providers -> Email to sign in directly.'
           );
@@ -72,29 +141,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
         }
       }
     } catch (err: any) {
-      // Extract the most descriptive error message from Supabase AuthApiError
-      const errorMsg =
+      const rawMsg =
         err?.error_description ||
         err?.message ||
         (typeof err === 'string' ? err : 'Authentication failed. Please verify your credentials.');
-      setError(errorMsg);
+      const lower = rawMsg.toLowerCase();
+      if (lower.includes('invalid login credentials') || lower.includes('invalid credentials')) {
+        setError('Invalid login credentials');
+      } else {
+        setError(rawMsg);
+      }
     } finally {
       setLoading(false);
     }
-
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="relative w-full max-w-md p-6 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl">
+    <div
+      onClick={handleBackdropClick}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto"
+      aria-modal="true"
+      role="dialog"
+    >
+      <div
+        ref={modalRef}
+        className="relative w-full max-w-md p-5 sm:p-6 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl my-auto max-h-[92vh] overflow-y-auto"
+      >
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 text-zinc-400 hover:text-white rounded-lg"
+          aria-label="Close modal"
+          className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white rounded-lg focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none z-10 transition-colors"
         >
           <X className="h-4 w-4" />
         </button>
 
-        <div className="mb-6">
+        <div className="mb-6 pr-8">
           <h3 className="text-xl font-bold text-white">
             {isSignUp ? 'Create Brand Account' : 'Sign in to BrandGate'}
           </h3>
@@ -128,7 +210,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@company.com"
-                className="w-full pl-9 pr-3 py-2 bg-black border border-zinc-700 rounded-xl text-white text-sm focus:border-teal-500 focus:outline-none"
+                className="w-full pl-9 pr-3 py-2 bg-black border border-zinc-700 rounded-xl text-white text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
               />
             </div>
           </div>
@@ -143,7 +225,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-9 pr-3 py-2 bg-black border border-zinc-700 rounded-xl text-white text-sm focus:border-teal-500 focus:outline-none"
+                className="w-full pl-9 pr-3 py-2 bg-black border border-zinc-700 rounded-xl text-white text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
               />
             </div>
           </div>
@@ -151,7 +233,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-black font-semibold text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            className="w-full py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-black font-semibold text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
           >
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
             {isSignUp ? 'Sign Up' : 'Sign In'}
@@ -165,7 +247,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
               <button
                 type="button"
                 onClick={() => setIsSignUp(false)}
-                className="text-teal-400 hover:underline font-medium"
+                className="text-teal-400 hover:underline font-medium focus-visible:ring-1 focus-visible:ring-teal-400 focus-visible:outline-none rounded px-1"
               >
                 Sign In
               </button>
@@ -176,7 +258,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
               <button
                 type="button"
                 onClick={() => setIsSignUp(true)}
-                className="text-teal-400 hover:underline font-medium"
+                className="text-teal-400 hover:underline font-medium focus-visible:ring-1 focus-visible:ring-teal-400 focus-visible:outline-none rounded px-1"
               >
                 Sign Up
               </button>

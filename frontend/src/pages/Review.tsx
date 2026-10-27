@@ -33,8 +33,19 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
 
   if (!draft) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-20 text-center">
-        <p className="text-zinc-500 text-base">No draft loaded. Please submit or load a draft first.</p>
+      <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-4">
+        <p className="text-zinc-400 text-sm">Draft not found — start a new demo draft</p>
+        <button
+          onClick={() => {
+            if (typeof window !== 'undefined') {
+              window.history.pushState({ tab: 'home' }, '', '/');
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            }
+          }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs transition-colors"
+        >
+          Return to Home
+        </button>
       </div>
     );
   }
@@ -203,7 +214,7 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
               }
               className="px-6 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black text-xs font-extrabold shadow-lg shadow-teal-500/20 active:scale-95 transition-all disabled:opacity-40 disabled:hover:bg-teal-400 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
             >
-              {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Approve Draft'}
+              {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Demo Reviewer Approve'}
             </button>
           )}
 
@@ -226,9 +237,17 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
         </div>
       )}
 
+      {findings.some((f) => f.lane === 'contradiction' || f.lane === 'evidence_needed') && isPending && (
+        <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800 text-xs text-amber-300 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-400" />
+          <span>Open findings remain on this draft. Apply all suggested fixes or request changes before approval can be granted.</span>
+        </div>
+      )}
+
       {error && (
-        <div className="p-4 rounded-xl bg-red-950/40 border border-red-900 text-red-400 text-xs">
-          {error}
+        <div className="p-4 rounded-xl bg-red-950/40 border border-red-900 text-red-400 text-xs flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span>{error}</span>
         </div>
       )}
 
@@ -245,13 +264,14 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
                 <h3 className="text-base font-extrabold text-white tracking-tight">LOCKED APPROVED SNAPSHOT</h3>
                 <p className="text-[11px] text-emerald-400 font-mono">
                   Approved by {draft.approved_snapshot.approver_role} on{' '}
-                  {new Date(draft.approved_snapshot.timestamp).toLocaleString()} ({draft.approved_snapshot.vault_version})
+                  {new Date(draft.approved_snapshot.timestamp).toLocaleString()}
+                  {draft.approved_snapshot.vault_version ? ` • ${draft.approved_snapshot.vault_version}` : ''}
                 </p>
               </div>
             </div>
             <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-mono font-bold flex items-center gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-              VERIFIED COMPLIANT
+              {draft.approved_snapshot.compliance_badge || 'VERIFIED COMPLIANT'}
             </span>
           </div>
 

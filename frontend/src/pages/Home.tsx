@@ -159,8 +159,8 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
           <div className="text-xs text-zinc-500 mt-1 uppercase tracking-wider font-semibold">Flags Allowed</div>
         </div>
         <div className="p-4 rounded-xl bg-zinc-950/40 border border-zinc-900">
-          <div className="text-2xl font-black text-emerald-400 font-mono">100%</div>
-          <div className="text-xs text-zinc-500 mt-1 uppercase tracking-wider font-semibold">Server-Side Verified</div>
+          <div className="text-2xl font-black text-emerald-400 font-mono">Verified</div>
+          <div className="text-xs text-zinc-500 mt-1 uppercase tracking-wider font-semibold">Server-Side Citation Check</div>
         </div>
         <div className="p-4 rounded-xl bg-zinc-950/40 border border-zinc-900">
           <div className="text-2xl font-black text-white font-mono">₹0.00</div>

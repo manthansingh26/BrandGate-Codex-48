@@ -3,7 +3,7 @@ import { Draft, Finding, ApiConnectionStatus } from '../types';
 import { api } from '../api/client';
 import { supabase } from '../supabase';
 import { runLocalDemoReview } from '../utils/localReviewEngine';
-import { sampleImageColors, calculateContrastRatio } from '../utils/imageAnalysis';
+import { sampleImageColors, calculateContrastRatio, ContrastResult } from '../utils/imageAnalysis';
 import { ShieldCheck, AlertCircle, RefreshCw, CheckCircle2, Image as ImageIcon, Eye } from 'lucide-react';
 
 interface SubmitProps {
@@ -24,7 +24,7 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
   const [logoConfirmed, setLogoConfirmed] = useState(false);
   const [sampledColors, setSampledColors] = useState<string[]>([]);
   const [isOffPalette, setIsOffPalette] = useState(false);
-  const [contrastResult, setContrastResult] = useState(calculateContrastRatio('#000000', '#FFFFFF'));
+  const [contrastResult, setContrastResult] = useState<ContrastResult | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -275,7 +275,7 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
               <span>•</span>
               <span>{bodyText.length} chars</span>
               <span>•</span>
-              <span className="text-teal-400">Tone rule: active</span>
+              <span className="text-teal-400">Rules active: R-04 superlatives</span>
             </div>
           </div>
           <textarea
@@ -417,15 +417,21 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
             <div className="p-4 rounded-xl bg-black/40 border border-zinc-800 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-zinc-300">WCAG 2.1 Contrast Benchmark Tool</span>
-                <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                    contrastResult.passesAA
-                      ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800'
-                      : 'bg-red-950/80 text-red-400 border border-red-800'
-                  }`}
-                >
-                  {contrastResult.ratioString} ({contrastResult.passesAA ? 'Passes AA' : 'Fails AA'})
-                </span>
+                {contrastResult ? (
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                      contrastResult.passesAA
+                        ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800'
+                        : 'bg-red-950/80 text-red-400 border border-red-800'
+                    }`}
+                  >
+                    {contrastResult.ratioString} ({contrastResult.passesAA ? 'Passes AA' : 'Fails AA'})
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono text-zinc-400 bg-zinc-900 border border-zinc-800">
+                    Not tested yet — run a test
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-3 text-xs">
                 <button

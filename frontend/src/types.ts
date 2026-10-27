@@ -70,6 +70,7 @@ export interface CommentItem {
 
 export interface ApprovedSnapshot {
   locked: boolean;
+  compliance_badge?: string;
   approved_text: string;
   image_reference?: string | null;
   alt_text?: string | null;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Draft, Finding, ApiConnectionStatus, LlmReviewResult } from '../types';
 import { api } from '../api/client';
 import { runLocalDemoReview } from '../utils/localReviewEngine';
@@ -22,12 +22,39 @@ export const Report: React.FC<ReportProps> = ({
   apiStatus,
 }) => {
   const [applyingFixId, setApplyingFixId] = useState<string | null>(null);
+  const [applyFixElapsed, setApplyFixElapsed] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let timer: any = null;
+    if (applyingFixId) {
+      setApplyFixElapsed(0);
+      timer = setInterval(() => {
+        setApplyFixElapsed((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setApplyFixElapsed(0);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [applyingFixId]);
 
   if (!draft) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-20 text-center">
-        <p className="text-zinc-500 text-base">No draft loaded. Please submit or load a draft to view its governance report.</p>
+      <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-4">
+        <p className="text-zinc-400 text-sm">Draft not found — start a new demo draft</p>
+        <button
+          onClick={() => {
+            if (typeof window !== 'undefined') {
+              window.history.pushState({ tab: 'home' }, '', '/');
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            }
+          }}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs transition-colors"
+        >
+          Return to Home
+        </button>
       </div>
     );
   }
@@ -216,7 +243,13 @@ export const Report: React.FC<ReportProps> = ({
                 </div>
                 <div className="space-y-3">
                   {contradictions.map((f, i) => (
-                    <FindingCard key={f.id || i} finding={f} onApplyFix={handleApplyFix} applyingFixId={applyingFixId} />
+                    <FindingCard
+                      key={f.id || i}
+                      finding={f}
+                      onApplyFix={handleApplyFix}
+                      applyingFixId={applyingFixId}
+                      applyFixElapsed={applyFixElapsed}
+                    />
                   ))}
                 </div>
               </div>
@@ -231,7 +264,13 @@ export const Report: React.FC<ReportProps> = ({
                 </div>
                 <div className="space-y-3">
                   {evidenceNeeded.map((f, i) => (
-                    <FindingCard key={f.id || i} finding={f} onApplyFix={handleApplyFix} applyingFixId={applyingFixId} />
+                    <FindingCard
+                      key={f.id || i}
+                      finding={f}
+                      onApplyFix={handleApplyFix}
+                      applyingFixId={applyingFixId}
+                      applyFixElapsed={applyFixElapsed}
+                    />
                   ))}
                 </div>
               </div>
@@ -246,7 +285,13 @@ export const Report: React.FC<ReportProps> = ({
                 </div>
                 <div className="space-y-3">
                   {humanDecision.map((f, i) => (
-                    <FindingCard key={f.id || i} finding={f} onApplyFix={handleApplyFix} applyingFixId={applyingFixId} />
+                    <FindingCard
+                      key={f.id || i}
+                      finding={f}
+                      onApplyFix={handleApplyFix}
+                      applyingFixId={applyingFixId}
+                      applyFixElapsed={applyFixElapsed}
+                    />
                   ))}
                 </div>
               </div>
@@ -323,9 +368,10 @@ interface FindingCardProps {
   finding: Finding;
   onApplyFix: (f: Finding) => void;
   applyingFixId: string | null;
+  applyFixElapsed: number;
 }
 
-const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applyingFixId }) => {
+const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applyingFixId, applyFixElapsed }) => {
   const isApplying = applyingFixId === finding.id;
 
   const severityColor = {
@@ -359,13 +405,13 @@ const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applying
       {finding.suggested_fix && (
         <button
           onClick={() => onApplyFix(finding)}
-          disabled={isApplying}
+          disabled={applyingFixId !== null}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs shadow-md shadow-teal-500/20 active:scale-95 transition-all disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
         >
           {isApplying ? (
             <>
               <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-              Remediating...
+              Applying fix... {applyFixElapsed}s
             </>
           ) : (
             <>
