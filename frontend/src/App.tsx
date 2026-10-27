@@ -110,57 +110,63 @@ export const App: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col font-sans">
-      <Navbar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        apiStatus={apiStatus}
-        userRole={userRole}
-        setUserRole={setUserRole}
-        currentUserEmail={currentUserEmail}
-        onSignOut={handleSignOut}
-        onRefreshHealth={initApp}
-      />
+    <div className="min-h-screen bg-[#05070E] text-slate-100 flex flex-col font-sans bg-grid-pattern relative selection:bg-teal-400 selection:text-black">
+      {/* Ambient Radial Gradient Glow */}
+      <div className="fixed inset-0 pointer-events-none bg-radial-gradient"></div>
 
-      <main className="flex-1">
-        {activeTab === 'home' && (
-          <Home
-            activeBrand={activeBrand}
-            onDraftCreated={handleDraftCreated}
-            apiStatus={apiStatus}
-          />
-        )}
-        {activeTab === 'vault' && <Vault activeBrand={activeBrand} />}
-        {activeTab === 'submit' && (
-          <Submit
-            currentDraft={activeDraft}
-            onReviewCompleted={handleReviewCompleted}
-            apiStatus={apiStatus}
-          />
-        )}
-        {activeTab === 'report' && (
-          <Report
-            draft={activeDraft}
-            findings={draftFindings}
-            llmReview={llmReviewResult}
-            onDraftUpdated={handleDraftUpdated}
-            onNavigateToReview={() => setActiveTab('review')}
-            apiStatus={apiStatus}
-          />
-        )}
+      <div className="relative z-10 flex flex-col min-h-screen">
+        <Navbar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          apiStatus={apiStatus}
+          userRole={userRole}
+          setUserRole={setUserRole}
+          currentUserEmail={currentUserEmail}
+          onSignOut={handleSignOut}
+          onRefreshHealth={initApp}
+        />
 
-        {activeTab === 'review' && (
-          <Review
-            draft={activeDraft}
-            findings={draftFindings}
-            userRole={userRole}
-            onDraftUpdated={handleDraftUpdated}
-          />
-        )}
-        {activeTab === 'insights' && (
-          <Insights activeBrand={activeBrand} />
-        )}
-      </main>
+        <main className="flex-1">
+          {activeTab === 'home' && (
+            <Home
+              activeBrand={activeBrand}
+              onDraftCreated={handleDraftCreated}
+              onNavigateToVault={() => setActiveTab('vault')}
+              apiStatus={apiStatus}
+            />
+          )}
+          {activeTab === 'vault' && <Vault activeBrand={activeBrand} />}
+          {activeTab === 'submit' && (
+            <Submit
+              currentDraft={activeDraft}
+              onReviewCompleted={handleReviewCompleted}
+              apiStatus={apiStatus}
+            />
+          )}
+          {activeTab === 'report' && (
+            <Report
+              draft={activeDraft}
+              findings={draftFindings}
+              llmReview={llmReviewResult}
+              onDraftUpdated={handleDraftUpdated}
+              onNavigateToReview={() => setActiveTab('review')}
+              apiStatus={apiStatus}
+            />
+          )}
+
+          {activeTab === 'review' && (
+            <Review
+              draft={activeDraft}
+              findings={draftFindings}
+              userRole={userRole}
+              onDraftUpdated={handleDraftUpdated}
+            />
+          )}
+          {activeTab === 'insights' && (
+            <Insights activeBrand={activeBrand} />
+          )}
+        </main>
+      </div>
     </div>
   );
 };

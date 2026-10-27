@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Draft, Finding, ApiConnectionStatus, LlmReviewResult } from '../types';
 import { api } from '../api/client';
 import { runLocalDemoReview } from '../utils/localReviewEngine';
-import { Check, ArrowRight, RefreshCw, Sparkles, AlertCircle } from 'lucide-react';
+import { Check, ArrowRight, RefreshCw, Sparkles, AlertCircle, AlertTriangle, ShieldCheck, CheckCircle2, Bot, Info } from 'lucide-react';
 
 interface ReportProps {
   draft: Draft | null;
@@ -21,7 +21,6 @@ export const Report: React.FC<ReportProps> = ({
   onNavigateToReview,
   apiStatus,
 }) => {
-
   const [applyingFixId, setApplyingFixId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,16 +39,11 @@ export const Report: React.FC<ReportProps> = ({
 
     try {
       if (apiStatus === 'connected') {
-        // 1. Apply fix via API (increments version, returns updated draft)
         await api.applyFix(draft.id, finding.id);
-
-        // 2. Re-run review on updated draft
         const reviewRes = await api.reviewDraft(draft.id);
         const updatedDraft = await api.getDraft(draft.id);
         onDraftUpdated(updatedDraft, reviewRes.findings, reviewRes.llm_review);
       } else {
-
-        // Local demo mode fix
         let newBody = draft.body_text;
         if (finding.citation_id === 'F-12' || finding.suggested_fix.includes('Rs.')) {
           newBody = newBody.replace(/(?:Rs\.?|INR|₹)\s*[\d,]+/gi, finding.suggested_fix);
@@ -63,8 +57,6 @@ export const Report: React.FC<ReportProps> = ({
             newBody = newBody.replace(new RegExp(match[1], 'gi'), finding.suggested_fix);
           }
         }
-
-
 
         const newVersionNo = draft.current_version + 1;
         const localUpdatedDraft: Draft = {
@@ -95,164 +87,234 @@ export const Report: React.FC<ReportProps> = ({
   const contradictions = findings.filter((f) => f.lane === 'contradiction');
   const evidenceNeeded = findings.filter((f) => f.lane === 'evidence_needed');
   const humanDecision = findings.filter((f) => f.lane === 'human_decision');
+  const aiFindings = llmReview?.findings || [];
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-10">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-6 mb-8">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-6">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1.5">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-teal-500/20 text-teal-400 border border-teal-500/30">
               Version {draft.current_version}
             </span>
             <span className="text-xs text-zinc-500 uppercase tracking-widest font-semibold">
-              Status: {draft.status}
+              Status: <span className="text-zinc-300 font-bold">{draft.status}</span>
             </span>
           </div>
-          <h1 className="text-3xl font-extrabold text-white">{draft.title}</h1>
+          <h1 className="text-3xl font-extrabold text-white tracking-tight">{draft.title}</h1>
         </div>
 
         <button
           onClick={onNavigateToReview}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700 text-sm font-semibold transition-colors"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-sm shadow-lg shadow-teal-500/20 active:scale-95 transition-all focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
         >
-          Reviewer Preview
+          Proceed to Approval Workflow
           <ArrowRight className="h-4 w-4" />
         </button>
       </div>
 
       {error && (
-        <div className="mb-6 p-3 rounded-lg bg-red-950/40 border border-red-900 text-red-400 text-sm">
+        <div className="p-4 rounded-xl bg-red-950/40 border border-red-900 text-red-400 text-sm">
           {error}
         </div>
       )}
 
+      {/* Metric Cards Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="glass-card p-5 rounded-2xl border border-red-500/20">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-red-400">Contradictions</span>
+            <AlertCircle className="h-4 w-4 text-red-400" />
+          </div>
+          <span className="text-3xl font-black text-white font-mono mt-2 block">
+            {contradictions.length}
+          </span>
+          <span className="text-[11px] text-zinc-500 mt-1 block">Factual & Pricing mismatches</span>
+        </div>
+
+        <div className="glass-card p-5 rounded-2xl border border-amber-500/20">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">Evidence Needed</span>
+            <AlertTriangle className="h-4 w-4 text-amber-400" />
+          </div>
+          <span className="text-3xl font-black text-white font-mono mt-2 block">
+            {evidenceNeeded.length}
+          </span>
+          <span className="text-[11px] text-zinc-500 mt-1 block">Unsubstantiated superlatives</span>
+        </div>
+
+        <div className="glass-card p-5 rounded-2xl border border-sky-500/20">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-sky-400">Human Decision</span>
+            <ShieldCheck className="h-4 w-4 text-sky-400" />
+          </div>
+          <span className="text-3xl font-black text-white font-mono mt-2 block">
+            {humanDecision.length}
+          </span>
+          <span className="text-[11px] text-zinc-500 mt-1 block">Logos, palettes & tone</span>
+        </div>
+
+        <div className="glass-card p-5 rounded-2xl border border-teal-500/20">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-teal-400">AI Suggestions</span>
+            <Sparkles className="h-4 w-4 text-teal-400" />
+          </div>
+          <span className="text-3xl font-black text-white font-mono mt-2 block">
+            {aiFindings.length}
+          </span>
+          <span className="text-[11px] text-zinc-500 mt-1 block">Grounded Gemini review</span>
+        </div>
+      </div>
+
       {/* Current Draft Text Display */}
-      <div className="mb-8 p-6 rounded-2xl bg-zinc-950 border border-zinc-800">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
-          Current Creative Copy (v{draft.current_version})
-        </h3>
-        <p className="text-base text-zinc-200 font-sans leading-relaxed">{draft.body_text}</p>
+      <div className="glass-card p-6 sm:p-7 rounded-2xl border border-white/[0.08] space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+            Creative Copy Under Evaluation (Version {draft.current_version})
+          </h3>
+          <span className="text-xs text-zinc-500 font-mono">
+            {draft.body_text.length} characters
+          </span>
+        </div>
+        <div className="p-4 rounded-xl bg-black/60 border border-zinc-800 text-sm sm:text-base text-zinc-100 font-sans leading-relaxed">
+          {draft.body_text}
+        </div>
         {draft.alt_text && (
-          <div className="mt-3 pt-3 border-t border-zinc-850 text-xs text-zinc-400">
-            <span className="font-semibold text-zinc-300">Alt text:</span> {draft.alt_text}
+          <div className="text-xs text-zinc-400 flex items-center gap-2 pt-1">
+            <span className="font-semibold text-zinc-300">Image Alt Text:</span> {draft.alt_text}
           </div>
         )}
       </div>
 
       {/* Findings Breakdown */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-white">Governance Findings ({findings.length})</h2>
-          <span className="text-xs text-zinc-500 font-mono">Hero rule: No citation, no flag</span>
+      <div className="space-y-8">
+        <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+            <span>Governance Findings</span>
+            <span className="text-sm font-mono font-normal text-zinc-400">({findings.length} active)</span>
+          </h2>
+          <span className="text-xs text-teal-400 font-mono font-bold">"No citation, no flag"</span>
         </div>
 
         {findings.length === 0 ? (
-          <div className="p-8 rounded-2xl bg-zinc-950 border border-zinc-800 text-center text-teal-400 font-medium">
-            <Check className="h-8 w-8 mx-auto mb-2 text-teal-400" />
-            All checks passed! No contradictions or evidence violations detected.
+          <div className="glass-card p-10 rounded-2xl border border-emerald-500/20 text-center space-y-3">
+            <CheckCircle2 className="h-12 w-12 text-emerald-400 mx-auto" />
+            <h3 className="text-xl font-bold text-white">All Governance Checks Passed!</h3>
+            <p className="text-sm text-zinc-400 max-w-md mx-auto">
+              Creative copy and visual assets align with all active Brand Vault rules. Proceed to the review tab to request final reviewer sign-off.
+            </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* Contradictions */}
-            {contradictions.map((f, idx) => (
-              <FindingCard
-                key={f.id || `contra-${idx}`}
-                finding={f}
-                onApplyFix={handleApplyFix}
-                applyingFixId={applyingFixId}
-              />
-            ))}
+          <div className="space-y-6">
+            {/* Lane 1: Contradictions */}
+            {contradictions.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-bold text-red-400 uppercase tracking-wider">
+                  <span className="h-2 w-2 rounded-full bg-red-400"></span>
+                  Lane: Contradictions ({contradictions.length})
+                </div>
+                <div className="space-y-3">
+                  {contradictions.map((f, i) => (
+                    <FindingCard key={f.id || i} finding={f} onApplyFix={handleApplyFix} applyingFixId={applyingFixId} />
+                  ))}
+                </div>
+              </div>
+            )}
 
-            {/* Evidence Needed */}
-            {evidenceNeeded.map((f, idx) => (
-              <FindingCard
-                key={f.id || `evi-${idx}`}
-                finding={f}
-                onApplyFix={handleApplyFix}
-                applyingFixId={applyingFixId}
-              />
-            ))}
+            {/* Lane 2: Evidence Needed */}
+            {evidenceNeeded.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-bold text-amber-400 uppercase tracking-wider">
+                  <span className="h-2 w-2 rounded-full bg-amber-400"></span>
+                  Lane: Evidence Needed ({evidenceNeeded.length})
+                </div>
+                <div className="space-y-3">
+                  {evidenceNeeded.map((f, i) => (
+                    <FindingCard key={f.id || i} finding={f} onApplyFix={handleApplyFix} applyingFixId={applyingFixId} />
+                  ))}
+                </div>
+              </div>
+            )}
 
-            {/* Human Decision */}
-            {humanDecision.map((f, idx) => (
-              <FindingCard
-                key={f.id || `hum-${idx}`}
-                finding={f}
-                onApplyFix={handleApplyFix}
-                applyingFixId={applyingFixId}
-              />
-            ))}
+            {/* Lane 3: Human Decisions */}
+            {humanDecision.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-bold text-sky-400 uppercase tracking-wider">
+                  <span className="h-2 w-2 rounded-full bg-sky-400"></span>
+                  Lane: Human Decisions ({humanDecision.length})
+                </div>
+                <div className="space-y-3">
+                  {humanDecision.map((f, i) => (
+                    <FindingCard key={f.id || i} finding={f} onApplyFix={handleApplyFix} applyingFixId={applyingFixId} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Phase 7 AI Review Section (Grounded LLM Findings) */}
-      <div className="p-6 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-850 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center">
-              <Sparkles className="h-3.5 w-3.5" />
+      {/* Grounded AI Review Panel (Secondary Advisory Layer) */}
+      <div className="glass-card p-6 sm:p-7 rounded-2xl border border-teal-500/20 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-zinc-800">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-400">
+              <Bot className="h-5 w-5" />
             </div>
-            <h3 className="text-base font-bold text-white">Grounded AI Review</h3>
-            {llmReview && (
-              <span className="text-xs font-mono text-zinc-400">
-                Provider: {llmReview.provider || 'gemini'} | Model: {llmReview.model}
-              </span>
-            )}
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                Grounded AI Compliance Review
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                  gemini-3.5-flash-lite
+                </span>
+              </h3>
+              <p className="text-xs text-zinc-400">
+                Advisory intelligence grounded exclusively in retrieved active vault records.
+              </p>
+            </div>
           </div>
-
-          {llmReview?.available ? (
-            <span className="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-teal-950 border border-teal-800 text-teal-400">
-              LLM review complete
-            </span>
-          ) : (
-            <span className="px-2.5 py-0.5 rounded text-xs font-mono font-semibold bg-zinc-900 border border-zinc-800 text-amber-400 flex items-center gap-1.5">
-              <AlertCircle className="h-3.5 w-3.5" />
-              LLM review unavailable ({llmReview?.reason || 'key not set'})
-            </span>
-          )}
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-teal-400">
+            {llmReview?.status || 'Advisory Layer Active'}
+          </span>
         </div>
 
-        {llmReview?.available ? (
-          <div className="space-y-4">
-            <div className="text-xs text-zinc-400 flex items-center gap-2">
-              <span className="text-zinc-500 font-medium">Retrieved vault items:</span>
-              <span className="font-mono text-teal-400">
-                {(llmReview.retrieved_citation_ids || []).join(', ') || 'None'}
-              </span>
-            </div>
-
-            {llmReview.findings.length === 0 ? (
-              <p className="text-xs text-zinc-400 italic">No additional AI compliance suggestions generated.</p>
-            ) : (
-              llmReview.findings.map((f, idx) => (
-                <FindingCard
-                  key={`llm-${idx}`}
-                  finding={f}
-                  onApplyFix={handleApplyFix}
-                  applyingFixId={applyingFixId}
-                />
-              ))
-            )}
-
-            <p className="text-[11px] text-zinc-500 italic pt-2 border-t border-zinc-900">
-              Disclosure: AI suggestions are grounded exclusively in retrieved vault items and filtered via the server-side Citation Validator. Reviewer confirmation is required.
-            </p>
+        {/* AI Findings List */}
+        {aiFindings.length > 0 ? (
+          <div className="space-y-3">
+            {aiFindings.map((f, i) => (
+              <div key={i} className="p-4 rounded-xl bg-black/40 border border-zinc-800 flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-teal-500/10 text-teal-300 border border-teal-500/20">
+                      Grounded in {f.citation_id}
+                    </span>
+                    <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">{f.lane}</span>
+                  </div>
+                  <p className="text-xs text-zinc-200 leading-relaxed">{f.explanation}</p>
+                </div>
+                {f.suggested_fix && (
+                  <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-teal-400 whitespace-nowrap">
+                    Fix: {f.suggested_fix}
+                  </span>
+                )}
+              </div>
+            ))}
           </div>
         ) : (
-          <div className="text-xs text-zinc-400 space-y-1">
-            <p>
-              Grounded AI review is currently unavailable: <span className="font-mono text-amber-400">{llmReview?.reason || 'key not set'}</span>.
-            </p>
-            <p className="text-zinc-500">
-              Deterministic checks continue to provide 100% compliance verification without relying on external model availability.
-            </p>
-          </div>
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            {llmReview?.reason
+              ? `AI review status: ${llmReview.status} (${llmReview.reason}). Deterministic review remains fully authoritative.`
+              : 'Grounded LLM review detected no additional secondary compliance risks.'}
+          </p>
         )}
+
+        {/* Honest Disclosure Note */}
+        <div className="flex items-center gap-2 text-[11px] text-zinc-500 pt-2 border-t border-zinc-850">
+          <Info className="h-3.5 w-3.5 text-zinc-400 flex-shrink-0" />
+          <span>Deterministic review is the primary safety gate. AI analysis is advisory and subject to the same citation validation.</span>
+        </div>
       </div>
-
-
     </div>
   );
 };
@@ -266,58 +328,52 @@ interface FindingCardProps {
 const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applyingFixId }) => {
   const isApplying = applyingFixId === finding.id;
 
-  const getLaneBadge = (lane: string) => {
-    switch (lane) {
-      case 'contradiction':
-        return <span className="px-2.5 py-0.5 rounded text-xs font-bold uppercase bg-red-950/60 border border-red-800 text-red-400">Contradiction</span>;
-      case 'evidence_needed':
-        return <span className="px-2.5 py-0.5 rounded text-xs font-bold uppercase bg-amber-950/60 border border-amber-800 text-amber-400">Evidence Needed</span>;
-      default:
-        return <span className="px-2.5 py-0.5 rounded text-xs font-bold uppercase bg-blue-950/60 border border-blue-800 text-blue-400">Human Decision</span>;
-    }
-  };
+  const severityColor = {
+    high: 'text-red-400 bg-red-950/30 border-red-800/40',
+    medium: 'text-amber-400 bg-amber-950/30 border-amber-800/40',
+    low: 'text-sky-400 bg-sky-950/30 border-sky-800/40',
+  }[finding.severity] || 'text-zinc-400 bg-zinc-900 border-zinc-800';
 
   return (
-    <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-colors">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+    <div className="glass-card glass-card-hover p-5 rounded-2xl border border-white/[0.08] flex flex-wrap items-center justify-between gap-4">
+      <div className="space-y-2 max-w-2xl">
         <div className="flex items-center gap-2">
-          {getLaneBadge(finding.lane)}
-          <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-teal-400 text-xs font-mono font-bold">
-            Citation: {finding.citation_id}
+          <span className="px-2.5 py-0.5 rounded-md text-xs font-mono font-bold bg-teal-500/10 text-teal-300 border border-teal-500/20">
+            {finding.citation_id}
           </span>
-          <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">
-            {finding.severity} severity
+          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${severityColor}`}>
+            {finding.severity} Severity
           </span>
         </div>
-
+        <p className="text-sm text-zinc-200 leading-relaxed font-sans">{finding.explanation}</p>
         {finding.suggested_fix && (
-          <button
-            onClick={() => onApplyFix(finding)}
-            disabled={isApplying}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/30 text-xs font-semibold transition-colors disabled:opacity-50"
-          >
-            {isApplying ? (
-              <>
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                Applying Fix...
-              </>
-            ) : (
-              <>
-                <Check className="h-3.5 w-3.5" />
-                Apply Fix: "{finding.suggested_fix}"
-              </>
-            )}
-          </button>
+          <div className="text-xs font-mono text-zinc-400 flex items-center gap-1.5 pt-1">
+            <span className="text-zinc-500 font-sans">Approved Replacement:</span>
+            <span className="px-2 py-0.5 rounded bg-black/60 border border-zinc-800 text-teal-400 font-bold">
+              "{finding.suggested_fix}"
+            </span>
+          </div>
         )}
       </div>
 
-      <p className="text-sm text-zinc-200 leading-relaxed font-sans">{finding.explanation}</p>
-
       {finding.suggested_fix && (
-        <div className="mt-3 pt-3 border-t border-zinc-900 text-xs text-zinc-400 flex items-center gap-2">
-          <span className="text-zinc-500 font-medium">Suggested correction:</span>
-          <span className="font-mono text-teal-400 font-semibold">{finding.suggested_fix}</span>
-        </div>
+        <button
+          onClick={() => onApplyFix(finding)}
+          disabled={isApplying}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs shadow-md shadow-teal-500/20 active:scale-95 transition-all disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
+        >
+          {isApplying ? (
+            <>
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              Remediating...
+            </>
+          ) : (
+            <>
+              <Check className="h-3.5 w-3.5" />
+              Apply Fix: "{finding.suggested_fix}"
+            </>
+          )}
+        </button>
       )}
     </div>
   );

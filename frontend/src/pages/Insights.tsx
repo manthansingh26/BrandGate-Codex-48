@@ -90,60 +90,82 @@ export const Insights: React.FC<InsightsProps> = ({ activeBrand }) => {
       )}
 
       {/* Summary Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800">
-          <span className="text-xs font-semibold text-zinc-400 block mb-1">Total Findings</span>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="glass-card p-5 rounded-2xl border border-white/[0.08]">
+          <span className="text-xs font-semibold text-zinc-400 block mb-1 uppercase tracking-wider">Total Findings</span>
           <span className="text-3xl font-black text-white font-mono">
             {data ? data.total_findings : 0}
           </span>
+          <span className="text-[11px] text-zinc-500 mt-1 block">Across all draft reviews</span>
         </div>
-        <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800">
-          <span className="text-xs font-semibold text-red-400 block mb-1">Contradictions</span>
+        <div className="glass-card p-5 rounded-2xl border border-red-500/20">
+          <span className="text-xs font-semibold text-red-400 block mb-1 uppercase tracking-wider">Contradictions</span>
           <span className="text-3xl font-black text-red-400 font-mono">
             {data ? data.counts_by_lane['contradiction'] || 0 : 0}
           </span>
+          <span className="text-[11px] text-zinc-500 mt-1 block">Factual discrepancies</span>
         </div>
-        <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800">
-          <span className="text-xs font-semibold text-amber-400 block mb-1">Evidence Needed</span>
+        <div className="glass-card p-5 rounded-2xl border border-amber-500/20">
+          <span className="text-xs font-semibold text-amber-400 block mb-1 uppercase tracking-wider">Evidence Needed</span>
           <span className="text-3xl font-black text-amber-400 font-mono">
             {data ? data.counts_by_lane['evidence_needed'] || 0 : 0}
           </span>
+          <span className="text-[11px] text-zinc-500 mt-1 block">Unsubstantiated claims</span>
         </div>
-        <div className="p-5 rounded-2xl bg-zinc-950 border border-zinc-800">
-          <span className="text-xs font-semibold text-blue-400 block mb-1">Human Decision</span>
-          <span className="text-3xl font-black text-blue-400 font-mono">
+        <div className="glass-card p-5 rounded-2xl border border-sky-500/20">
+          <span className="text-xs font-semibold text-sky-400 block mb-1 uppercase tracking-wider">Human Decision</span>
+          <span className="text-3xl font-black text-sky-400 font-mono">
             {data ? data.counts_by_lane['human_decision'] || 0 : 0}
           </span>
+          <span className="text-[11px] text-zinc-500 mt-1 block">Logos, palettes & tone</span>
         </div>
       </div>
 
       {/* Detailed Breakdown by Citation ID */}
-      <div className="p-6 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-4">
-        <div className="flex items-center justify-between border-b border-zinc-855 pb-3">
-          <h3 className="text-base font-bold text-white">Violations & Findings by Vault Citation ID</h3>
-          <span className="text-xs text-zinc-500 font-mono">Zero counts shown explicitly</span>
+      <div className="glass-card p-6 sm:p-7 rounded-2xl border border-white/[0.08] space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+          <div>
+            <h3 className="text-base font-bold text-white tracking-tight">Active Findings Distribution by Vault Citation ID</h3>
+            <p className="text-xs text-zinc-400 mt-0.5">Frequency of governance findings flagged against ground-truth rules.</p>
+          </div>
+          <span className="text-xs text-teal-400 font-mono font-semibold">Real PostgreSQL aggregation</span>
         </div>
 
-        <div className="divide-y divide-zinc-900">
+        <div className="space-y-3">
           {canonicalCitations.map((item) => {
             const count = data?.counts_by_citation[item.id] || 0;
+            const maxVal = Math.max(...Object.values(data?.counts_by_citation || {}), 1);
+            const percent = Math.round((count / maxVal) * 100);
+
             return (
-              <div key={item.id} className="py-3 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-3">
-                  <span className="px-2 py-0.5 rounded font-mono font-bold bg-zinc-900 border border-zinc-800 text-teal-400">
+              <div key={item.id} className="p-3.5 rounded-xl bg-black/40 border border-zinc-850 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-3 min-w-[280px]">
+                  <span className="px-2.5 py-0.5 rounded-md font-mono font-bold bg-teal-500/10 border border-teal-500/20 text-teal-300">
                     {item.id}
                   </span>
-                  <span className="text-zinc-200 font-medium">{item.label}</span>
-                  <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-semibold text-zinc-500 bg-zinc-900">
-                    {item.type}
-                  </span>
+                  <div>
+                    <span className="text-zinc-200 font-semibold block">{item.label}</span>
+                    <span className="text-[10px] uppercase font-semibold text-zinc-500">
+                      Category: {item.type}
+                    </span>
+                  </div>
                 </div>
+
+                <div className="flex-1 max-w-xs mx-0 sm:mx-4 hidden sm:block">
+                  <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-teal-400 rounded-full transition-all duration-500"
+                      style={{ width: `${count > 0 ? Math.max(percent, 8) : 0}%` }}
+                    ></div>
+                  </div>
+                </div>
+
                 <span
-                  className={`font-mono font-bold px-2.5 py-0.5 rounded ${
-                    count > 0 ? 'bg-teal-950 text-teal-400 border border-teal-800' : 'text-zinc-600'
+                  className={`font-mono font-bold px-3 py-1 rounded-full text-xs text-right whitespace-nowrap ${
+                    count > 0 ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30' : 'text-zinc-600 bg-zinc-900/60'
                   }`}
                 >
-                  {count}
+                  {count} {count === 1 ? 'occurrence' : 'occurrences'}
                 </span>
               </div>
             );

@@ -250,188 +250,229 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
         </div>
       )}
 
-      {/* Submission Form */}
-      <div className="space-y-6 bg-zinc-950 p-6 sm:p-8 rounded-2xl border border-zinc-800">
+      {/* Submission Form Container */}
+      <div className="glass-card p-6 sm:p-8 rounded-2xl border border-white/[0.08] space-y-6 shadow-2xl">
         <div>
-          <label className="block text-sm font-semibold text-zinc-300 mb-1">Campaign Title</label>
+          <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
+            Campaign / Creative Title
+          </label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full px-4 py-2.5 bg-black border border-zinc-700 rounded-xl text-white text-sm focus:border-teal-500 focus:outline-none"
+            className="w-full px-4 py-3 bg-black/60 border border-zinc-800 rounded-xl text-white text-sm focus:border-teal-500 focus:outline-none transition-colors"
             placeholder="e.g. Diwali Cookware Festive Promotion"
           />
         </div>
 
         <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="block text-sm font-semibold text-zinc-300">
-              Creative Body Text <span className="text-red-400">*</span>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300">
+              Creative Body Copy <span className="text-red-400">*</span>
             </label>
-            <span className="text-xs text-zinc-500">Tone checking: Rule-based phrase matching</span>
+            <div className="flex items-center gap-3 text-xs text-zinc-400 font-mono">
+              <span>{bodyText.trim() ? bodyText.trim().split(/\s+/).length : 0} words</span>
+              <span>•</span>
+              <span>{bodyText.length} chars</span>
+              <span>•</span>
+              <span className="text-teal-400">Tone rule: active</span>
+            </div>
           </div>
           <textarea
             value={bodyText}
             onChange={(e) => setBodyText(e.target.value)}
-            className="w-full p-4 bg-black border border-zinc-700 rounded-xl text-white text-sm focus:border-teal-500 focus:outline-none h-32 leading-relaxed"
-            placeholder="Enter advertising or social post copy..."
+            className="w-full p-4 bg-black/60 border border-zinc-800 rounded-xl text-white text-sm focus:border-teal-500 focus:outline-none h-36 leading-relaxed font-sans transition-colors"
+            placeholder="Enter advertising, promotional, or social post copy..."
           />
         </div>
 
         {/* Image & Alt-Text Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
-          <div>
-            <label className="block text-sm font-semibold text-zinc-300 mb-1">
-              Creative Image (Optional — Supabase Storage "brandgate-creatives")
-            </label>
-            <div className="border-2 border-dashed border-zinc-800 rounded-xl p-4 text-center bg-black hover:border-zinc-700 transition-colors">
-              {imagePreview ? (
-                <div className="space-y-2">
-                  <img
-                    src={imagePreview}
-                    alt="Creative Preview"
-                    className="max-h-36 mx-auto rounded-lg object-contain"
-                  />
-                  <div className="flex items-center justify-center gap-4 text-xs">
-                    <a
-                      href={imagePreview}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-teal-400 hover:underline flex items-center gap-1"
-                    >
-                      <Eye className="h-3 w-3" />
-                      Open Public URL
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setImagePreview(null);
-                        setSampledColors([]);
-                      }}
-                      className="text-red-400 hover:underline"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <label className="cursor-pointer flex flex-col items-center justify-center py-4">
-                  <ImageIcon className="h-8 w-8 text-zinc-500 mb-2" />
-                  <span className="text-xs text-zinc-400">
-                    {uploading ? 'Processing Image...' : 'Click to upload PNG or JPEG'}
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/png, image/jpeg"
-                    onChange={handleImageChange}
-                    className="hidden"
-                  />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+          {/* Left Column: Image Upload & Visual Analysis */}
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300">
+                  Creative Image Asset
                 </label>
-              )}
+                <span className="text-[11px] text-zinc-500 font-mono">Max 5MB • PNG, JPEG, WebP</span>
+              </div>
+              <div className="border-2 border-dashed border-zinc-800 hover:border-zinc-700 rounded-xl p-4 text-center bg-black/40 transition-colors">
+                {imagePreview ? (
+                  <div className="space-y-3">
+                    <img
+                      src={imagePreview}
+                      alt="Creative Preview"
+                      className="max-h-40 mx-auto rounded-lg object-contain border border-zinc-800 bg-black/60"
+                    />
+                    <div className="flex items-center justify-center gap-4 text-xs font-mono">
+                      {imagePreview.startsWith('http') && (
+                        <a
+                          href={imagePreview}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-teal-400 hover:underline flex items-center gap-1 font-semibold"
+                        >
+                          <Eye className="h-3 w-3" />
+                          Public Asset URL
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImagePreview(null);
+                          setSampledColors([]);
+                          setIsOffPalette(false);
+                        }}
+                        className="text-zinc-500 hover:text-red-400 transition-colors"
+                      >
+                        Remove Image
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer block py-6">
+                    <ImageIcon className="h-10 w-10 text-zinc-600 mx-auto mb-2" />
+                    <span className="text-xs text-zinc-300 font-semibold block">
+                      {uploading ? 'Uploading to Supabase Storage...' : 'Click or drop creative file to attach'}
+                    </span>
+                    <span className="text-[11px] text-zinc-500 mt-1 block">
+                      Enforces color palette, contrast ratio, and logo compliance
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={handleImageChange}
+                      disabled={uploading}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
             </div>
 
-            {/* Approximate Palette Sampling Display */}
+            {/* Extracted Color Palette Preview */}
             {sampledColors.length > 0 && (
-              <div className="mt-3 p-3 rounded-xl bg-zinc-900 border border-zinc-850">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-semibold text-zinc-300">Sampled Dominant Colors</span>
-                  <span className="text-[10px] text-zinc-500">Approximate</span>
+              <div className="p-3.5 rounded-xl bg-black/40 border border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-zinc-300">Dominant Sampled Colors</span>
+                  <span className="text-[10px] text-zinc-500 font-mono">Label: Approximate</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {sampledColors.map((hex, i) => (
-                    <div key={i} className="flex items-center gap-1">
-                      <div className="h-5 w-5 rounded border border-white/20" style={{ backgroundColor: hex }}></div>
-                      <span className="text-[10px] font-mono text-zinc-400">{hex}</span>
+                  {sampledColors.map((hex, idx) => (
+                    <div key={idx} className="flex-1 text-center">
+                      <div className="h-8 rounded-lg mb-1 border border-white/10" style={{ backgroundColor: hex }}></div>
+                      <span className="text-[10px] font-mono text-zinc-400 block">{hex}</span>
                     </div>
                   ))}
                 </div>
                 {isOffPalette && (
-                  <p className="text-[11px] text-amber-400 mt-1.5">
-                    Palette sampling is approximate — reviewer to confirm.
+                  <p className="text-[11px] text-amber-400 flex items-center gap-1 font-medium pt-1">
+                    <AlertCircle className="h-3 w-3" />
+                    Palette sampling is approximate — reviewer confirmation recommended.
                   </p>
                 )}
               </div>
             )}
           </div>
 
+          {/* Right Column: Alt Text & Logo Check */}
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-zinc-300 mb-1">
-                Image Alt Text <span className="text-zinc-500 font-normal">(Rule R-09)</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300">
+                  Image Alt Text <span className="text-zinc-500 font-normal font-mono">(Rule R-09)</span>
+                </label>
+                <span className="text-[11px] text-zinc-500 font-mono">Accessibility mandatory</span>
+              </div>
               <textarea
                 value={altText}
                 onChange={(e) => setAltText(e.target.value)}
                 placeholder="Descriptive text for accessibility. Rule R-09 requires descriptive alt text when an image is present..."
-                className="w-full p-3 bg-black border border-zinc-700 rounded-xl text-white text-sm focus:border-teal-500 focus:outline-none h-24 leading-relaxed"
+                className="w-full p-3 bg-black/60 border border-zinc-800 rounded-xl text-white text-xs focus:border-teal-500 focus:outline-none h-24 leading-relaxed font-sans transition-colors"
               />
             </div>
 
             {/* Logo Check Reviewer Confirmation Checkbox (A-02) */}
-            <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-1">
+            <div className="p-4 rounded-xl bg-black/40 border border-zinc-800 space-y-1">
               <label className="flex items-start gap-2.5 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={logoConfirmed}
                   onChange={(e) => setLogoConfirmed(e.target.checked)}
-                  className="mt-0.5 rounded border-zinc-700 text-teal-500 focus:ring-0"
+                  className="mt-0.5 rounded border-zinc-700 text-teal-400 focus:ring-0"
                 />
                 <div>
-                  <span className="text-xs font-semibold text-white">
-                    I confirm this creative uses the current logo only (A-02)
+                  <span className="text-xs font-bold text-white block">
+                    Confirm approved current logo file (Rule A-02)
                   </span>
                   <p className="text-[11px] text-zinc-400 leading-normal mt-0.5">
-                    Archived logos are never accepted. Logo checking is reviewer-confirmed only — automatic logo verification is never claimed.
+                    Archived logos are rejected. Logo checking is reviewer-confirmed only — automatic logo verification is never claimed.
                   </p>
                 </div>
               </label>
             </div>
+
+            {/* WCAG Contrast Ratio Checker Tool */}
+            <div className="p-4 rounded-xl bg-black/40 border border-zinc-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-zinc-300">WCAG 2.1 Contrast Benchmark Tool</span>
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                    contrastResult.passesAA
+                      ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800'
+                      : 'bg-red-950/80 text-red-400 border border-red-800'
+                  }`}
+                >
+                  {contrastResult.ratioString} ({contrastResult.passesAA ? 'Passes AA' : 'Fails AA'})
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => handleContrastTest('#000000', '#FFFFFF')}
+                  className="px-2.5 py-1 rounded bg-black border border-zinc-700 text-white hover:border-teal-500"
+                >
+                  Test Baseline: Black on White (21:1)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleContrastTest('#888888', '#FFFFFF')}
+                  className="px-2.5 py-1 rounded bg-black border border-zinc-700 text-zinc-400 hover:border-red-500"
+                >
+                  Test Low Contrast: Gray on White (3.5:1)
+                </button>
+              </div>
+              <div className="text-[11px] text-zinc-500 font-mono">
+                Standard baseline: Black on white = 21:1. Minimum AA threshold = 4.5:1.
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* WCAG Contrast Ratio Checker Tool */}
-        <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-white uppercase tracking-wider">
-              WCAG Contrast Checker (Target: AA 4.5:1)
-            </span>
-            <span className="text-xs font-mono font-bold text-teal-400">
-              Ratio: {contrastResult.ratioString} ({contrastResult.passesAA ? 'PASSES AA' : 'FAILS AA'})
-            </span>
+        {/* Action Bar */}
+        <div className="pt-4 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-4">
+          <div className="text-xs text-zinc-500 font-mono flex items-center gap-3">
+            <span>Deterministic engine</span>
+            <span>•</span>
+            <span>Grounded Gemini review</span>
+            <span>•</span>
+            <span>Citation validator</span>
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs">
-            <button
-              type="button"
-              onClick={() => handleContrastTest('#000000', '#FFFFFF')}
-              className="px-2.5 py-1 rounded bg-black border border-zinc-700 text-white hover:border-teal-500"
-            >
-              Test Baseline: Black on White (21:1)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleContrastTest('#888888', '#FFFFFF')}
-              className="px-2.5 py-1 rounded bg-black border border-zinc-700 text-zinc-400 hover:border-red-500"
-            >
-              Test Low Contrast: Gray on White (3.5:1)
-            </button>
-          </div>
-        </div>
 
-        {/* Submit Review Button */}
-        <div className="pt-4 border-t border-zinc-800 flex justify-end">
           <button
             onClick={handleReview}
-            disabled={reviewing || uploading}
-            className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-black font-bold text-base shadow-lg shadow-teal-500/20 active:scale-98 transition-all disabled:opacity-50"
+            disabled={reviewing || !bodyText.trim()}
+            className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-sm shadow-xl shadow-teal-500/20 active:scale-95 transition-all disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:outline-none"
           >
             {reviewing ? (
               <>
-                <RefreshCw className="h-5 w-5 animate-spin" />
+                <RefreshCw className="h-4 w-4 animate-spin" />
                 Analyzing against Brand Vault...
               </>
             ) : (
               <>
-                <ShieldCheck className="h-5 w-5" />
+                <ShieldCheck className="h-4 w-4" />
                 Review Draft
               </>
             )}
