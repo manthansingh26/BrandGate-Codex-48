@@ -228,7 +228,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#05070E] text-slate-100 flex flex-col font-sans bg-grid-pattern relative selection:bg-teal-400 selection:text-black">
+    <div className="min-h-screen bg-[#080D12] text-[#F3F7FA] flex flex-col font-sans bg-grid-pattern relative selection:bg-teal-400 selection:text-black">
       {/* Ambient Radial Gradient Glow */}
       <div className="fixed inset-0 pointer-events-none bg-radial-gradient"></div>
 

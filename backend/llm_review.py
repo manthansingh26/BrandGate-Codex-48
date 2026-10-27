@@ -316,12 +316,11 @@ def call_gemini_review(
             pass
 
         # Safe diagnostic log: status and message only (never logs key or full prompt)
-        print(f"[GOOGLE_HTTP_ERROR] code: {google_code} | status: '{google_status}' | message: '{google_msg[:200]}'")
         logger.warning(f"[GOOGLE_HTTP_ERROR] code: {google_code} | status: '{google_status}' | message: '{google_msg[:200]}'")
 
         # If model is unavailable (503 demand spike or 404 deprecated), automatically fallback to active gemini-3.5-flash-lite
         if http_err.code in [404, 503] and model != "gemini-3.5-flash-lite":
-            print(f"[GEMINI_FALLBACK] {http_err.code} on {model}. Retrying with active model 'gemini-3.5-flash-lite'...")
+            logger.info(f"[GEMINI_FALLBACK] {http_err.code} on {model}. Retrying with active model 'gemini-3.5-flash-lite'...")
             return call_gemini_review(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,

@@ -9,8 +9,10 @@
 body {
   margin: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: #05070E;
-  color: #F8FAFC;
+  background-color: #080D12;
+  color: #F3F7FA;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 code, kbd, samp, pre {
@@ -22,19 +24,33 @@ code, kbd, samp, pre {
   .bg-grid-pattern {
     background-size: 40px 40px;
     background-image:
-      linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
   }
 
   .bg-radial-gradient {
-    background: radial-gradient(circle at 50% 0%, rgba(20, 184, 166, 0.12) 0%, rgba(5, 7, 14, 0) 70%);
+    background: radial-gradient(circle at 50% 0%, rgba(37, 224, 190, 0.1) 0%, rgba(8, 13, 18, 0) 70%);
   }
 
   .glass-card {
-    background: rgba(10, 15, 29, 0.75);
+    background: rgba(11, 17, 24, 0.82);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .double-bezel {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 3px;
+    border-radius: 1.25rem;
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6);
+  }
+
+  .double-bezel-inner {
+    background: rgba(11, 17, 24, 0.95);
+    border-radius: calc(1.25rem - 3px);
+    border: 1px solid rgba(255, 255, 255, 0.04);
   }
 
   .glass-card-hover {
@@ -43,8 +59,8 @@ code, kbd, samp, pre {
 
   .glass-card-hover:hover {
     transform: translateY(-2px);
-    border-color: rgba(45, 212, 191, 0.3);
-    box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.5), 0 0 20px -5px rgba(20, 184, 166, 0.15);
+    border-color: rgba(37, 224, 190, 0.35);
+    box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.6), 0 0 20px -5px rgba(37, 224, 190, 0.15);
   }
 
   .focus-ring {
@@ -52,8 +68,17 @@ code, kbd, samp, pre {
   }
 
   .focus-ring:focus-visible {
-    outline: 2px solid #2dd4bf;
+    outline: 2px solid #25E0BE;
     outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

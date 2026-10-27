@@ -95,8 +95,8 @@ class AddCommentRequest(BaseModel):
 
 
 class AttachImageRequest(BaseModel):
-    image_url: str = Field(..., min_length=1, description="Public URL of the uploaded creative image")
-    alt_text: Optional[str] = Field(None, description="Image descriptive accessibility alt text")
+    image_url: str = Field(..., min_length=1, max_length=2000, description="Public URL of the uploaded creative image")
+    alt_text: Optional[str] = Field(None, max_length=1000, description="Image descriptive accessibility alt text")
     logo_confirmed: bool = Field(False, description="Reviewer confirmed approved current logo only (A-02)")
 
 class ReviewDraftRequest(BaseModel):
