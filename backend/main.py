@@ -419,8 +419,8 @@ def reset_demo_vault(brand_id: str, request: Request = None):
             "brand_id": brand_id,
             "item_id": "T-04",
             "kind": "terminology",
-            "title": "Approved Term: trusted by millions",
-            "text": 'Term "trusted by millions" is an approved replacement for unsupported ranking claims.',
+            "title": "Approved Term: trusted cookware brand",
+            "text": 'Term "trusted cookware brand" is an approved replacement for unsupported ranking claims.',
             "status": "active"
         },
         {

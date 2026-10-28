@@ -152,7 +152,7 @@ def run_deterministic_review(
                         "severity": "medium",
                         "citation_id": item_id,
                         "explanation": f"Term '{bad_term}' is restricted under vault item {item_id}.",
-                        "suggested_fix": "certified quality" if "clinically" in bad_term.lower() else "trusted by millions"
+                        "suggested_fix": "certified quality" if "clinically" in bad_term.lower() else "trusted cookware brand"
                     })
 
     # --------------------------------------------------------------------------
