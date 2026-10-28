@@ -248,7 +248,7 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
                     ? 'Draft must be pending approval'
                     : 'Approve draft for publication'
                 }
-                className="btn-primary-micro inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-teal-400 text-black text-xs font-extrabold shadow-lg shadow-teal-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="btn-primary-micro inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-teal-400 text-black text-xs font-extrabold shadow-lg shadow-teal-500/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
               >
                 {actionLoading && <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />}
                 <span>Demo Reviewer Approve</span>

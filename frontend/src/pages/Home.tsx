@@ -140,7 +140,7 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
           <button
             onClick={handleTryDemoDraft}
             disabled={loading}
-            className="btn-primary-micro group inline-flex items-center justify-center gap-3 pl-7 pr-2.5 py-2.5 rounded-full bg-teal-400 text-black font-extrabold text-sm shadow-xl shadow-teal-500/20 disabled:opacity-50"
+            className="btn-primary-micro group inline-flex items-center justify-center gap-3 pl-7 pr-2.5 py-2.5 rounded-full bg-teal-400 text-black font-extrabold text-sm shadow-xl shadow-teal-500/20 disabled:opacity-50 disabled:shadow-none"
           >
             {loading ? (
               <span className="flex items-center gap-2 py-1 pr-4">

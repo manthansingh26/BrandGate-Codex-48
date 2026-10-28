@@ -533,7 +533,7 @@ const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applying
         <button
           onClick={() => onApplyFix(finding)}
           disabled={applyingFixId !== null}
-          className="btn-primary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 text-black font-bold text-xs shadow-md shadow-teal-500/20 disabled:opacity-50"
+          className="btn-primary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 text-black font-bold text-xs shadow-md shadow-teal-500/20 disabled:opacity-50 disabled:shadow-none"
         >
           {isApplying ? (
             <>
