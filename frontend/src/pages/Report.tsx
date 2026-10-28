@@ -330,8 +330,10 @@ export const Report: React.FC<ReportProps> = ({
             <p className="text-sm text-zinc-400 max-w-md mx-auto">
               {draft.status === 'approved' ? (
                 'Approved and locked — see Review for the locked snapshot'
+              ) : draft.image_url ? (
+                'Creative copy and uploaded visual asset align with all active Brand Vault rules. Proceed to the review tab to request final reviewer sign-off.'
               ) : (
-                'Creative copy and visual assets align with all active Brand Vault rules. Proceed to the review tab to request final reviewer sign-off.'
+                'Creative copy aligns with all active Brand Vault rules (no visual asset was uploaded for this draft). Proceed to the review tab to request final reviewer sign-off.'
               )}
             </p>
           </div>

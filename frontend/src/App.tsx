@@ -37,7 +37,27 @@ export const App: React.FC = () => {
     return 'home';
   });
 
-  const [apiStatus, setApiStatus] = useState<ApiConnectionStatus>('waking');
+  const [apiStatus, setApiStatusRaw] = useState<ApiConnectionStatus>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = sessionStorage.getItem('brandgate_api_status');
+        if (cached === 'connected') return 'connected';
+      } catch {}
+    }
+    return 'waking';
+  });
+  const setApiStatus = (status: ApiConnectionStatus) => {
+    setApiStatusRaw(status);
+    if (typeof window !== 'undefined') {
+      try {
+        if (status === 'connected') {
+          sessionStorage.setItem('brandgate_api_status', 'connected');
+        } else {
+          sessionStorage.removeItem('brandgate_api_status');
+        }
+      } catch {}
+    }
+  };
   const [wakingElapsed, setWakingElapsed] = useState<number>(0);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [activeBrand, setActiveBrand] = useState<Brand | null>(null);
@@ -234,6 +254,29 @@ export const App: React.FC = () => {
   };
 
   useEffect(() => {
+    // Skip health check if we already have a cached 'connected' status from this session.
+    // Only run on genuine cold start or when status is not connected (e.g. first load).
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = sessionStorage.getItem('brandgate_api_status');
+        if (cached === 'connected') {
+          // Still load brands even when using cached status
+          (async () => {
+            try {
+              const brands = await api.getBrands();
+              if (brands && brands.length > 0) {
+                setActiveBrand(brands[0]);
+              }
+            } catch {
+              // Brand fetch failed — run full health check to verify connection
+              sessionStorage.removeItem('brandgate_api_status');
+              initApp();
+            }
+          })();
+          return;
+        }
+      } catch {}
+    }
     initApp();
   }, []);
 

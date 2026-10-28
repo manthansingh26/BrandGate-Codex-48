@@ -223,7 +223,7 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
               </div>
               <h3 className="text-base font-bold text-white tracking-tight">Deterministic Safety Gate</h3>
               <p className="text-xs sm:text-sm text-[#A2B0BD] mt-2.5 leading-relaxed">
-                Primary server-side verification executing regex price matching, superlative claim checking, and alt-text accessibility rules without model hallucinations.
+                Primary server-side verification executing regex price matching, superlative claim checking, and alt-text accessibility rules — deterministic checks do not use model output.
               </p>
             </div>
             <div className="mt-6 pt-4 border-t border-white/[0.06] flex items-center gap-2 text-xs text-cyan-400 font-semibold font-mono">
