@@ -90,7 +90,7 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
   // Approve Draft
   const handleApprove = async () => {
     if (hasOpenFindings) {
-      setError('Cannot approve: open findings remain — apply fixes or request changes first.');
+      setError('Cannot approve: open findings remain');
       return;
     }
     setActionLoading(true);
@@ -235,23 +235,30 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
 
           {/* Approve Button */}
           {!isApproved && (
-            <button
-              onClick={handleApprove}
-              disabled={actionLoading || userRole !== 'reviewer' || !isPending || hasOpenFindings}
-              title={
-                hasOpenFindings
-                  ? 'Cannot approve: open findings remain — apply fixes or request changes first.'
-                  : userRole !== 'reviewer'
-                  ? 'Reviewer approval required (switch role to Reviewer)'
-                  : !isPending
-                  ? 'Draft must be pending approval'
-                  : 'Approve draft for publication'
-              }
-              className="btn-primary-micro inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black text-xs font-extrabold shadow-lg shadow-teal-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {actionLoading && <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />}
-              <span>Demo Reviewer Approve</span>
-            </button>
+            <div className="flex flex-col items-start gap-1">
+              <button
+                onClick={handleApprove}
+                disabled={actionLoading || userRole !== 'reviewer' || !isPending || hasOpenFindings}
+                title={
+                  hasOpenFindings
+                    ? 'Cannot approve: open findings remain'
+                    : userRole !== 'reviewer'
+                    ? 'Reviewer approval required (switch role to Reviewer)'
+                    : !isPending
+                    ? 'Draft must be pending approval'
+                    : 'Approve draft for publication'
+                }
+                className="btn-primary-micro inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-teal-400 text-black text-xs font-extrabold shadow-lg shadow-teal-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {actionLoading && <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />}
+                <span>Demo Reviewer Approve</span>
+              </button>
+              {hasOpenFindings && (
+                <span className="text-[11px] text-amber-400 font-mono font-medium">
+                  Cannot approve: open findings remain
+                </span>
+              )}
+            </div>
           )}
 
           {/* Request Changes Button */}
@@ -283,10 +290,24 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
         </div>
       )}
 
-      {findings.some((f) => f.lane === 'contradiction' || f.lane === 'evidence_needed') && isPending && (
-        <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800 text-xs text-amber-300 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-400" />
-          <span>Open findings remain on this draft. Apply all suggested fixes or request changes before approval can be granted.</span>
+      {hasOpenFindings && !isApproved && (
+        <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800 text-xs text-amber-300 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-400" />
+            <span className="font-semibold text-amber-200">Cannot approve: open findings remain</span>
+            <span className="text-amber-400/80 hidden sm:inline">— apply fixes or request changes first.</span>
+          </div>
+          <button
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                window.history.pushState({ tab: 'report' }, '', '/report');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }
+            }}
+            className="btn-secondary-micro px-3 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-mono font-bold whitespace-nowrap"
+          >
+            View Findings in Report
+          </button>
         </div>
       )}
 

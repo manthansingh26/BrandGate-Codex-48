@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Brand, InsightsData } from '../types';
+import { Brand, InsightsData, VaultItem } from '../types';
 import { api } from '../api/client';
 import { BarChart3, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
 
@@ -9,6 +9,7 @@ interface InsightsProps {
 
 export const Insights: React.FC<InsightsProps> = ({ activeBrand }) => {
   const [data, setData] = useState<InsightsData | null>(null);
+  const [vaultMap, setVaultMap] = useState<Record<string, VaultItem>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,8 +17,25 @@ export const Insights: React.FC<InsightsProps> = ({ activeBrand }) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await api.getInsights(activeBrand?.id);
+      const brandId = activeBrand?.id || '00000000-0000-0000-0000-000000000001';
+      const [result, vaultData] = await Promise.all([
+        api.getInsights(activeBrand?.id),
+        api.getVault(brandId).catch(() => null),
+      ]);
       setData(result);
+      if (vaultData) {
+        const map: Record<string, VaultItem> = {};
+        const allItems = [
+          ...(vaultData.fact || []),
+          ...(vaultData.rule || []),
+          ...(vaultData.terminology || []),
+          ...(vaultData.palette || []),
+        ];
+        allItems.forEach((item) => {
+          map[item.item_id] = item;
+        });
+        setVaultMap(map);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load insights data');
     } finally {
@@ -29,20 +47,32 @@ export const Insights: React.FC<InsightsProps> = ({ activeBrand }) => {
     fetchInsights();
   }, [activeBrand?.id]);
 
-  const canonicalCitations = [
-    { id: 'F-12', label: 'Festive Price Offer (F-12)', type: 'Fact' },
-    { id: 'R-04', label: 'Superlatives & Claims Evidence (R-04)', type: 'Rule' },
-    { id: 'A-02', label: 'Approved Logo Check (A-02)', type: 'Rule' },
-    { id: 'R-09', label: 'Descriptive Alt Text (R-09)', type: 'Rule' },
-    { id: 'P-01', label: 'Primary Brand Blue (P-01)', type: 'Palette' },
-    { id: 'P-02', label: 'Secondary Accent Amber (P-02)', type: 'Palette' },
-    { id: 'P-03', label: 'Surface Neutral Light (P-03)', type: 'Palette' },
-    { id: 'P-04', label: 'Text Slate Dark (P-04)', type: 'Palette' },
-    { id: 'T-01', label: 'Restricted Term: clinically proven (T-01)', type: 'Terminology' },
-    { id: 'T-02', label: "Restricted Term: India's No. 1 (T-02)", type: 'Terminology' },
-    { id: 'T-03', label: 'Approved Term: certified quality (T-03)', type: 'Terminology' },
-    { id: 'T-04', label: 'Seeded Term: trusted by millions (T-04)', type: 'Terminology (Pending Evidence)' },
+  const baseCitations = [
+    { id: 'F-12', fallbackLabel: 'Festive Price Offer (F-12)', fallbackType: 'Fact' },
+    { id: 'R-04', fallbackLabel: 'Superlatives & Claims Evidence (R-04)', fallbackType: 'Rule' },
+    { id: 'A-02', fallbackLabel: 'Approved Logo Check (A-02)', fallbackType: 'Rule' },
+    { id: 'R-09', fallbackLabel: 'Descriptive Alt Text (R-09)', fallbackType: 'Rule' },
+    { id: 'P-01', fallbackLabel: 'Primary Brand Blue (P-01)', fallbackType: 'Palette' },
+    { id: 'P-02', fallbackLabel: 'Secondary Accent Amber (P-02)', fallbackType: 'Palette' },
+    { id: 'P-03', fallbackLabel: 'Surface Neutral Light (P-03)', fallbackType: 'Palette' },
+    { id: 'P-04', fallbackLabel: 'Text Slate Dark (P-04)', fallbackType: 'Palette' },
+    { id: 'T-01', fallbackLabel: 'Restricted Term: clinically proven (T-01)', fallbackType: 'Terminology' },
+    { id: 'T-02', fallbackLabel: "Restricted Term: India's No. 1 (T-02)", fallbackType: 'Terminology' },
+    { id: 'T-03', fallbackLabel: 'Approved Term: certified quality (T-03)', fallbackType: 'Terminology' },
+    { id: 'T-04', fallbackLabel: 'Approved Term: trusted cookware brand (T-04)', fallbackType: 'Terminology' },
   ];
+
+  const canonicalCitations = baseCitations.map((item) => {
+    const liveItem = vaultMap[item.id];
+    if (liveItem) {
+      const typeStr = liveItem.kind
+        ? liveItem.kind.charAt(0).toUpperCase() + liveItem.kind.slice(1)
+        : item.fallbackType;
+      const label = liveItem.title.includes(`(${item.id})`) ? liveItem.title : `${liveItem.title} (${item.id})`;
+      return { id: item.id, label, type: typeStr };
+    }
+    return { id: item.id, label: item.fallbackLabel, type: item.fallbackType };
+  });
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10 space-y-8">

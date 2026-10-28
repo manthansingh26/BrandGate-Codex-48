@@ -292,7 +292,9 @@ export const Report: React.FC<ReportProps> = ({
         <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
           <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
             <span>Governance Findings</span>
-            <span className="text-sm font-mono font-normal text-zinc-400">({findings.length} active)</span>
+            <span className="text-sm font-mono font-normal text-zinc-400">
+              {draft.status === 'draft' ? '(— pending review)' : `(${findings.length} active)`}
+            </span>
           </h2>
           <span className="text-xs text-teal-400 font-mono font-bold">"No citation, no flag"</span>
         </div>
@@ -315,7 +317,7 @@ export const Report: React.FC<ReportProps> = ({
                   window.dispatchEvent(new PopStateEvent('popstate'));
                 }
               }}
-              className="btn-primary-micro inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-xs shadow-lg shadow-teal-500/20 transition-all"
+              className="btn-primary-micro inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-teal-400 text-black font-extrabold text-xs shadow-lg shadow-teal-500/20"
             >
               Go to Submit & Review Draft
               <ArrowRight className="h-4 w-4" />
@@ -326,7 +328,11 @@ export const Report: React.FC<ReportProps> = ({
             <CheckCircle2 className="h-12 w-12 text-emerald-400 mx-auto" />
             <h3 className="text-xl font-bold text-white">All Governance Checks Passed!</h3>
             <p className="text-sm text-zinc-400 max-w-md mx-auto">
-              Creative copy and visual assets align with all active Brand Vault rules. Proceed to the review tab to request final reviewer sign-off.
+              {draft.status === 'approved' ? (
+                'Approved and locked — see Review for the locked snapshot'
+              ) : (
+                'Creative copy and visual assets align with all active Brand Vault rules. Proceed to the review tab to request final reviewer sign-off.'
+              )}
             </p>
           </div>
         ) : (
@@ -525,7 +531,7 @@ const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applying
         <button
           onClick={() => onApplyFix(finding)}
           disabled={applyingFixId !== null}
-          className="btn-primary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs shadow-md shadow-teal-500/20 disabled:opacity-50"
+          className="btn-primary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 text-black font-bold text-xs shadow-md shadow-teal-500/20 disabled:opacity-50"
         >
           {isApplying ? (
             <>

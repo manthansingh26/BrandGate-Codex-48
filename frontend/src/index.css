@@ -78,16 +78,17 @@ code, kbd, samp, pre {
 }
 .btn-primary-micro:hover:not(:disabled) {
   transform: translateY(-1px) scale(1.02) !important;
-  filter: brightness(1.08) !important;
+  background-color: #5EEAD4 !important;
+  color: #000000 !important;
   box-shadow: 0 8px 24px rgba(45, 212, 191, 0.35) !important;
 }
 .btn-primary-micro:active:not(:disabled) {
   transform: translateY(0) scale(0.98) !important;
+  background-color: #2DD4BF !important;
   box-shadow: 0 2px 8px rgba(45, 212, 191, 0.20) !important;
-  filter: brightness(1.0) !important;
 }
 .btn-primary-micro:focus-visible {
-  outline: 2px solid #2DD4BF !important;
+  outline: 2px solid transparent !important;
   outline-offset: 2px !important;
   box-shadow: 0 0 0 2px #080D12, 0 0 0 4px #2DD4BF !important;
 }
@@ -97,6 +98,7 @@ code, kbd, samp, pre {
   transform: none !important;
   box-shadow: none !important;
   filter: none !important;
+  background-color: #2DD4BF !important;
 }
 
 /* 2. Secondary Buttons */
@@ -108,14 +110,17 @@ code, kbd, samp, pre {
 .btn-secondary-micro:hover:not(:disabled) {
   transform: translateY(-1px) !important;
   border-color: #2DD4BF !important;
-  background-color: rgba(255, 255, 255, 0.05) !important;
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 12px rgba(45, 212, 191, 0.15) !important;
 }
 .btn-secondary-micro:active:not(:disabled) {
   transform: translateY(0) scale(0.98) !important;
 }
 .btn-secondary-micro:focus-visible {
-  outline: 2px solid #2DD4BF !important;
+  outline: 2px solid transparent !important;
   outline-offset: 2px !important;
+  box-shadow: 0 0 0 2px #080D12, 0 0 0 4px #2DD4BF !important;
 }
 .btn-secondary-micro:disabled {
   cursor: not-allowed !important;
@@ -141,13 +146,17 @@ code, kbd, samp, pre {
 /* 4. Non-clickable Feature Cards & Stat Tiles */
 .feature-card-micro {
   cursor: default !important;
-  transition: transform 200ms ease-out, border-color 200ms ease-out, box-shadow 200ms ease-out !important;
+  transition: transform 200ms ease-out, border-color 200ms ease-out, box-shadow 200ms ease-out, background-color 200ms ease-out !important;
   will-change: transform, box-shadow;
 }
 .feature-card-micro:hover {
-  border-color: rgba(45, 212, 191, 0.35) !important;
+  border-color: rgba(45, 212, 191, 0.45) !important;
   transform: translateY(-2px) !important;
-  box-shadow: 0 16px 36px -10px rgba(0, 0, 0, 0.7), 0 0 20px -5px rgba(45, 212, 191, 0.20) !important;
+  box-shadow: 0 16px 36px -10px rgba(0, 0, 0, 0.7), 0 0 24px -2px rgba(45, 212, 191, 0.25) !important;
+  background-color: rgba(14, 22, 33, 0.95) !important;
+}
+.feature-card-micro:hover .double-bezel-inner {
+  border-color: rgba(45, 212, 191, 0.40) !important;
 }
 
 /* 5. Vault Rows, Report Finding Cards, Review Timeline */

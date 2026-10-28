@@ -228,7 +228,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           ) : (
             <button
               onClick={() => setAuthModalOpen(true)}
-              className="btn-secondary-micro inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs text-white font-medium"
+              className="btn-secondary-micro inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-900 border border-zinc-700 text-xs text-white font-medium"
             >
               <LogIn className="h-3 w-3 text-teal-400" />
               Sign in

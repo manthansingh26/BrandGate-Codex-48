@@ -549,7 +549,7 @@ const VaultCard: React.FC<VaultCardProps> = ({
           <div className="mt-2 p-2.5 rounded-xl bg-amber-950/40 border border-amber-800/60 text-xs text-amber-300 flex items-start gap-2">
             <Info className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
             <span>
-              <strong>Seeded phrase notice:</strong> Subject to evidence substantiation. BrandGate requires verified substantiation before numeric audience claims ("millions") can be cited as factual assertions.
+              <strong>Seeded phrase notice:</strong> Seeded phrase — pending evidence substantiation. Numeric audience claims require verified substantiation before they can be cited as factual assertions.
             </span>
           </div>
         )}
