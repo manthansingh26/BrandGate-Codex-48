@@ -59,7 +59,7 @@ The judge evaluation path requires **zero sign-in** and works out of the box in 
 * **Brand Vault Truth Engine**: Centralized ground truth grouping approved facts (`F-12`), non-negotiable rules (`R-04`, `A-02`, `R-09`), approved terminology (`T-01` to `T-04`), and approved color palettes (`P-01` to `P-04`).
 * **Deterministic Review (Primary Gate)**: Server-side evaluation engine executing regex pricing reconciliation, superlative evidence verification, alt-text accessibility checks, and WCAG contrast validation.
 * **Grounded Gemini Review (Advisory Layer)**: Secondary compliance suggestions powered by Google Gemini (see live Report panel for the deployed model string), strictly grounded in retrieved vault items via keyword fallback and validated by the citation validator.
-<!-- TODO: Model string UNRESOLVED — verify before submission (frontend Report shows gemini-2.5-flash-lite, backend LLM_MODEL env shows gemini-3.5-flash-lite) -->
+<!-- TODO: Model string UNRESOLVED — verify before submission (see live Report panel vs backend LLM_MODEL env) -->
 * **Suggested Corrections (Not Rejection)**: Constructive one-click remediation replacing prohibited superlatives with approved terminology (`T-04` "trusted cookware brand", `T-03` "certified quality").
 * **Approval State Machine**: Server-side transitions (`draft` ➔ `checked` ➔ `pending_approval` ➔ `approved`, plus `needs_changes`).
   * Enforces author-reviewer separation: Creator accounts cannot approve their own drafts (`HTTP 403 Forbidden`).
@@ -147,7 +147,7 @@ Live production screenshots captured directly from [https://brand-gate-rho.verce
 * **Backend**: Python 3.11, FastAPI, Pydantic v2, Uvicorn, deployed on **Render**.
 * **Database & Auth**: PostgreSQL on **Supabase**, Supabase Auth, Supabase Storage (`brandgate-creatives`).
 * **AI Provider**: Google Gemini (see live Report panel for the deployed model string), temperature 0.2, retrieval-only context.
-<!-- TODO: Model string UNRESOLVED — verify before submission (frontend Report shows gemini-2.5-flash-lite, backend LLM_MODEL env shows gemini-3.5-flash-lite) -->
+<!-- TODO: Model string UNRESOLVED — verify before submission (see live Report panel vs backend LLM_MODEL env) -->
 
 ---
 
@@ -172,7 +172,7 @@ Required environment variables in `backend/.env` (**names only — never commit 
 * `SUPABASE_SERVICE_KEY` *(Note: Must be the secret service_role key, NOT the publishable/anon key)*
 * `LLM_PROVIDER=gemini`
 * `GEMINI_API_KEY`
-* `LLM_MODEL=gemini-3.5-flash-lite`
+* `LLM_MODEL=<deployed model — see live Report panel>`
 * `FRONTEND_URL=http://localhost:5173,https://brand-gate-rho.vercel.app`
 
 ### Frontend Setup
@@ -216,7 +216,7 @@ BrandGate includes real automated test suites located in `tests/`:
 
 1. **LLM Provider Migration**: Migrated from NVIDIA NIM to Google Gemini via Google AI Studio for superior JSON adherence.
 2. **Model Selection**: Upgraded to Google Gemini (see live Report panel for the deployed model string) after earlier versions encountered availability changes.
-<!-- TODO: Model string UNRESOLVED — verify before submission (frontend Report shows gemini-2.5-flash-lite, backend LLM_MODEL env shows gemini-3.5-flash-lite) -->
+<!-- TODO: Model string UNRESOLVED — verify before submission (see live Report panel vs backend LLM_MODEL env) -->
 3. **Review Call Timeout**: Capped review timeout at 60s for initial generation with graceful labeled fallback (`"LLM review unavailable"`).
 4. **Connection Resilience**: Implemented a 70s health check timeout to accommodate Render free-tier cold starts, paired with a 90s total retry duration, live intermediate state reporting (`waking`), and heuristic detection for browser extension blocks (`net::ERR_BLOCKED_BY_CLIENT`).
 5. **Frontend Design Elevation**: Completely redesigned interface adopting Linear/Stripe bento layouts, dark space navy tokens (`#05070E`), subtle coordinate grid backdrops, glassmorphism cards, and touch-friendly mobile navigation for 375px screens.
@@ -252,16 +252,3 @@ Proposed for Round 3 — not yet built:
 * **Leader**: Manthan Shravansingh Rajpurohit
 * **Hackathon**: Codex 48 (Organized by We Code Coders; Problem Statement by Inkloom AI)
 * **AI Disclosure**: Built with the assistance of Claude Code and Google Gemini inside the official hackathon build window.
-
----
-
-## 13. Good-README Quality Audit & Rubric Assessment (Self-Assessment)
-
-| Evaluation Category | Max Points | Awarded Points | Verification Evidence |
-|---|---|---|---|
-| **Clarity & Judge-First Ordering** | 20 | **20** | Live links at top, 60-second walkthrough, no marketing fluff. |
-| **Completeness & Architecture** | 20 | **20** | Full tech stack, ASCII architecture flow, seeded vault IDs. |
-| **Runnable Setup & Configuration** | 20 | **20** | Step-by-step local commands, env var names only, Vercel/Supabase lessons. |
-| **Honest Limitations & Disclosure** | 20 | **20** | Cold starts disclosed, approximate sampling labeled, logo review disclaimer. |
-| **Real Evidence & Test Integrity** | 20 | **20** | 17 verified tests listed, 5 test fixtures table with actual results. |
-| **Total Score** | **100** | **100 / 100** | *Self-assessment by Claude Code, not an independent score.* Submittable, judge-ready hackathon documentation. |
