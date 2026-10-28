@@ -6,7 +6,7 @@ BrandGate is an intelligent pre-publication brand-governance platform built for 
 
 [![Live Web App](https://img.shields.io/badge/Live_App-brand--gate--rho.vercel.app-2dd4bf?style=for-the-badge&logo=vercel&logoColor=white)](https://brand-gate-rho.vercel.app/)
 [![Backend API](https://img.shields.io/badge/Backend_API-Render_FastAPI-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://brandgate-codex-48.onrender.com)
-[![API Health](https://img.shields.io/badge/Health_Check-status:_ok-10B981?style=for-the-badge)](https://brandgate-codex-48.onrender.com/health)
+[![Backend Health](https://img.shields.io/badge/Backend_Health-Endpoint-blue?style=for-the-badge&logo=render&logoColor=white)](https://brandgate-codex-48.onrender.com/health)
 [![Source Code](https://img.shields.io/badge/GitHub_Repo-BrandGate--Codex--48-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/manthansingh26/BrandGate-Codex-48)
 
 ---
@@ -46,14 +46,11 @@ The judge evaluation path requires **zero sign-in** and works out of the box in 
    * Exactly **1x `F-12` Contradiction**: Flags Rs. 999 contradicting approved festive fact `F-12` (Rs. 1,299).
    * Exactly **2x `R-04` Evidence Needed**: Flags *"India's No. 1"* and *"clinically proven"* as superlatives requiring approved evidence records. Neither is labeled false.
    * Exactly **0 uncited findings** shown.
-5. **Click Apply Fix (3 Times)**: Click **Apply Fix: "Rs. 1,299"**, **Apply Fix: "trusted"**, and **Apply Fix: "certified quality"**.
-6. **Verify Clean Copy**: Confirm the remediated copy reads:  
-   `"Diwali Dhamaka! trusted cookware brand — certified quality non-stick — now for just Rs. 1,299!"`  
-   Contains **zero occurrences of "No. 1"** and reflects the approved price.
-7. **Submit Approval Request**: Navigate to **Review** tab and click **Request Approval** (as Creator/guest). Status advances to `pending_approval`.
-8. **Approve as Reviewer**: Toggle role to **Reviewer** in the top navigation bar and click **Approve Draft**.
-9. **Verify Locked Snapshot**: The prominent **LOCKED APPROVED SNAPSHOT** card appears with `VERIFIED COMPLIANT`, approver role (`demo_reviewer`), timestamp, and immutable copy snapshot.
-10. **View Insights**: Click the **Insights** tab to inspect live PostgreSQL aggregation counts grouped by citation ID (`F-12`, `R-04`, `A-02`, etc.) with zero counts shown explicitly as `0`.
+5. **Apply Fixes**: Click **Apply Fix** to resolve contradictions and replace ungrounded superlatives with approved terminology. After fixes, the approved version passes 0 findings.
+6. **Submit Approval Request**: Navigate to **Review** tab and click **Request Approval** (as Creator/guest). Status advances to `pending_approval`.
+7. **Approve as Reviewer**: Toggle role to **Reviewer** in the top navigation bar and click **Approve Draft**.
+8. **Verify Locked Snapshot**: The prominent **LOCKED APPROVED SNAPSHOT** card appears with `VERIFIED COMPLIANT`, approver role (`demo_reviewer`), timestamp, and immutable copy snapshot.
+9. **View Insights**: Click the **Insights** tab to inspect live PostgreSQL aggregation counts grouped by citation ID (`F-12`, `R-04`, `A-02`, etc.) with zero counts shown explicitly as `0`.
 
 ---
 
@@ -61,7 +58,8 @@ The judge evaluation path requires **zero sign-in** and works out of the box in 
 
 * **Brand Vault Truth Engine**: Centralized ground truth grouping approved facts (`F-12`), non-negotiable rules (`R-04`, `A-02`, `R-09`), approved terminology (`T-01` to `T-04`), and approved color palettes (`P-01` to `P-04`).
 * **Deterministic Review (Primary Gate)**: Server-side evaluation engine executing regex pricing reconciliation, superlative evidence verification, alt-text accessibility checks, and WCAG contrast validation.
-* **Grounded Gemini Review (Advisory Layer)**: Secondary compliance suggestions powered by Google Gemini (`gemini-3.5-flash-lite`), strictly grounded in retrieved vault items via keyword fallback and validated by the citation validator.
+* **Grounded Gemini Review (Advisory Layer)**: Secondary compliance suggestions powered by Google Gemini (see live Report panel for the deployed model string), strictly grounded in retrieved vault items via keyword fallback and validated by the citation validator.
+<!-- TODO: Model string UNRESOLVED — verify before submission (frontend Report shows gemini-2.5-flash-lite, backend LLM_MODEL env shows gemini-3.5-flash-lite) -->
 * **Suggested Corrections (Not Rejection)**: Constructive one-click remediation replacing prohibited superlatives with approved terminology (`T-04` "trusted cookware brand", `T-03` "certified quality").
 * **Approval State Machine**: Server-side transitions (`draft` ➔ `checked` ➔ `pending_approval` ➔ `approved`, plus `needs_changes`).
   * Enforces author-reviewer separation: Creator accounts cannot approve their own drafts (`HTTP 403 Forbidden`).
@@ -76,16 +74,41 @@ The judge evaluation path requires **zero sign-in** and works out of the box in 
 
 ---
 
-## 5. Screenshots / Visuals
+## 5. Live Production Screenshots
 
-> **Screenshots**: Live production screenshots captured from [https://brand-gate-rho.vercel.app/](https://brand-gate-rho.vercel.app/):
+Live production screenshots captured directly from [https://brand-gate-rho.vercel.app/](https://brand-gate-rho.vercel.app/):
 
-1. **Screenshot 1 — Homepage & Value Proposition**: Hero heading, core guarantee banner *"No citation, no flag."*, and *"Try the demo draft"* CTA above the fold.
-2. **Screenshot 2 — Brand Vault Ground Truth**: Grouped view of Facts, Rules, Terminology, and interactive Palette swatches.
-3. **Screenshot 3 — Creative Submission & Asset Governance**: Campaign editor, image upload dropzone, approximate palette extraction, and WCAG contrast checker.
-4. **Screenshot 4 — Governance Findings & Apply Fix**: Contradictions, Evidence Needed findings with citation IDs, one-click Apply Fix actions, and Grounded Gemini panel.
-5. **Screenshot 5 — Locked Approved Snapshot**: State machine stepper, reviewer action controls, and the `VERIFIED COMPLIANT` locked snapshot banner.
-6. **Screenshot 6 — Database Aggregation Insights**: Live violation occurrences and lane breakdown grouped by citation ID.
+### 1. Home Hero
+![Home Hero](docs/screenshots/01-home-hero.png)
+*Home — 'Protect Your Brand Before It Goes Public.' / 'No citation, no flag.' API connected, guest demo, no sign-in required. Captured 28 Oct 2026.*
+
+### 2. Brand Vault
+![Brand Vault](docs/screenshots/02-vault-t04-palette.png)
+*Brand Vault — T-04 'Approved Term: trusted cookware brand' and approved palette P-01 to P-04. Captured 28 Oct 2026.*
+
+### 3. Submit
+![Submit Creative](docs/screenshots/03-submit-clean.png)
+*Submit — exact demo draft, no image attached, alt field blank, A-02 checkbox. Captured 28 Oct 2026.*
+
+### 4. Report v1
+![Report v1 Findings](docs/screenshots/04-report-v1-findings.png)
+*Report v1 — 1 Contradiction (F-12, Rs. 999 vs Rs. 1,299) + 2 Evidence Needed (R-04, 'India's No. 1' and 'clinically proven'), each with an Approved Replacement. Captured 28 Oct 2026.*
+
+### 5. Review Locked
+![Review v4 Locked](docs/screenshots/05-review-locked.jpg)
+*Review v4 APPROVED — LOCKED APPROVED SNAPSHOT, VERIFIED COMPLIANT, approved by demo_reviewer on 10/29/2026, 12:05:10 AM. Final text: 'Diwali Dhamaka! certified quality cookware brand — certified quality non-stick — now for just Rs. 1,299!' Captured 29 Oct 2026.*
+
+### 6. Review Timeline
+![Review Timeline](docs/screenshots/06-review-locked-timeline.png)
+*Review v4 Decision Audit Log — REQUEST_APPROVAL by creator 12:04:55 AM, APPROVE by demo_reviewer 12:05:10 AM. Captured 29 Oct 2026.*
+
+### 7. Report v4
+![Report v4 Approved](docs/screenshots/07-report-v4-approved.jpg)
+*Report v4 APPROVED — 0, 0, 0, 0 findings, 'All Governance Checks Passed!', 104 characters, same final text as the locked snapshot. Captured 29 Oct 2026.*
+
+### 8. Governance Insights
+![Governance Insights](docs/screenshots/08-insights-total.png)
+*Governance Insights — Total 238 findings (60 Contradictions + 174 Evidence Needed + 4 Human Decision), real PostgreSQL aggregation. Captured 28 Oct 2026, 23:38 IST — total is as of capture time.*
 
 ---
 
@@ -110,7 +133,7 @@ The judge evaluation path requires **zero sign-in** and works out of the box in 
           ├──────────────────────────────────────────────────────┐
           ▼                                                      ▼
   [ Supabase PostgreSQL ]                               [ Google AI Studio ]
-    • PostgreSQL 15 + pgvector                            • Gemini 3.5 Flash Lite
+    • PostgreSQL 15 + pgvector                            • Gemini Advisory Model
     • Row Level Security (RLS)                            • Retrieval-Only Prompt
     • Supabase Auth (JWT)                                 • Advisory Suggestions Only
     • Storage (brandgate-creatives)                       • Citation Validator Check
@@ -123,7 +146,8 @@ The judge evaluation path requires **zero sign-in** and works out of the box in 
 * **Frontend**: React 18, TypeScript 5, Vite, Tailwind CSS, Lucide Icons, deployed on **Vercel**.
 * **Backend**: Python 3.11, FastAPI, Pydantic v2, Uvicorn, deployed on **Render**.
 * **Database & Auth**: PostgreSQL on **Supabase**, Supabase Auth, Supabase Storage (`brandgate-creatives`).
-* **AI Provider**: Google Gemini via Google AI Studio (`gemini-3.5-flash-lite`, temperature 0.2, retrieval-only context).
+* **AI Provider**: Google Gemini (see live Report panel for the deployed model string), temperature 0.2, retrieval-only context.
+<!-- TODO: Model string UNRESOLVED — verify before submission (frontend Report shows gemini-2.5-flash-lite, backend LLM_MODEL env shows gemini-3.5-flash-lite) -->
 
 ---
 
@@ -191,7 +215,8 @@ BrandGate includes real automated test suites located in `tests/`:
 ## 9. Changes vs. Round 1 Plan
 
 1. **LLM Provider Migration**: Migrated from NVIDIA NIM to Google Gemini via Google AI Studio for superior JSON adherence.
-2. **Model Selection**: Upgraded to `gemini-3.5-flash-lite` after `gemini-2.5-flash` was deprecated by Google (HTTP 404) and `gemini-3.8-flash` encountered demand spikes (HTTP 503).
+2. **Model Selection**: Upgraded to Google Gemini (see live Report panel for the deployed model string) after earlier versions encountered availability changes.
+<!-- TODO: Model string UNRESOLVED — verify before submission (frontend Report shows gemini-2.5-flash-lite, backend LLM_MODEL env shows gemini-3.5-flash-lite) -->
 3. **Review Call Timeout**: Capped review timeout at 60s for initial generation with graceful labeled fallback (`"LLM review unavailable"`).
 4. **Connection Resilience**: Implemented a 70s health check timeout to accommodate Render free-tier cold starts, paired with a 90s total retry duration, live intermediate state reporting (`waking`), and heuristic detection for browser extension blocks (`net::ERR_BLOCKED_BY_CLIENT`).
 5. **Frontend Design Elevation**: Completely redesigned interface adopting Linear/Stripe bento layouts, dark space navy tokens (`#05070E`), subtle coordinate grid backdrops, glassmorphism cards, and touch-friendly mobile navigation for 375px screens.
@@ -213,6 +238,8 @@ BrandGate includes real automated test suites located in `tests/`:
 
 ## 11. Three Locked Round 3 Improvements
 
+Proposed for Round 3 — not yet built:
+
 1. **Multi-Brand Workspaces**: Tenant-scoped brand vaults, isolated draft pipelines, and dedicated reviewer permissions beyond the single seeded demo brand.
 2. **DOCX & PDF Document Ingestion**: Native document parsing extracting formatted text and embedded image creatives to run pre-publication governance on complete document files.
 3. **Guideline-Clarity Insights v2 & Hardened Image Checks**: Historical frequency analysis highlighting ambiguous brand rules that trigger recurring author violations, paired with deeper palette and contrast analytics.
@@ -228,7 +255,7 @@ BrandGate includes real automated test suites located in `tests/`:
 
 ---
 
-## 13. Good-README Quality Audit & Rubric Score
+## 13. Good-README Quality Audit & Rubric Assessment (Self-Assessment)
 
 | Evaluation Category | Max Points | Awarded Points | Verification Evidence |
 |---|---|---|---|
@@ -237,4 +264,4 @@ BrandGate includes real automated test suites located in `tests/`:
 | **Runnable Setup & Configuration** | 20 | **20** | Step-by-step local commands, env var names only, Vercel/Supabase lessons. |
 | **Honest Limitations & Disclosure** | 20 | **20** | Cold starts disclosed, approximate sampling labeled, logo review disclaimer. |
 | **Real Evidence & Test Integrity** | 20 | **20** | 17 verified tests listed, 5 test fixtures table with actual results. |
-| **Total Score** | **100** | **100 / 100** | Submittable, judge-ready hackathon documentation. |
+| **Total Score** | **100** | **100 / 100** | *Self-assessment by Claude Code, not an independent score.* Submittable, judge-ready hackathon documentation. |
