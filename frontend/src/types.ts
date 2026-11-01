@@ -153,7 +153,7 @@ export interface DraftTimelineItem {
   title: string;
   created_at?: string;
   findings_count: number;
-  disposition: 'Clear to Publish' | 'Clear with Edits' | 'Hold for Legal';
+  disposition: 'Clear to Publish' | 'Clear with Edits' | 'Hold for Legal' | 'Pending Review';
   has_contradiction: boolean;
 }
 

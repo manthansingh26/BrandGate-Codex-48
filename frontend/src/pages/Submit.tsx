@@ -150,6 +150,9 @@ export const Submit: React.FC<SubmitProps> = ({
 
     setDocFile(file);
     setDocParsing(true);
+    setError(null);
+    setHonestLimitWarning(null);
+    setUnextractableImageNotice(null);
 
     try {
       if (apiStatus === 'connected') {
@@ -295,8 +298,8 @@ export const Submit: React.FC<SubmitProps> = ({
   };
 
   const handleReview = async () => {
-    if (reviewing) return;
-    if (!bodyText.trim()) {
+    if (reviewing || docParsing) return;
+    if (!bodyText.trim() && !docFile) {
       setError('Add draft text or upload a document before reviewing.');
       return;
     }
@@ -305,30 +308,51 @@ export const Submit: React.FC<SubmitProps> = ({
     setError(null);
 
     try {
-      // After approval, start a fresh draft rather than overwriting locked snapshot
-      let draftId = currentDraft?.status === 'approved' ? null : currentDraft?.id;
+      const targetBrandId = activeBrand?.id || '00000000-0000-0000-0000-000000000001';
+      const defaultFallbackTitle = isBrandB ? 'NovaTech ANC 500 Launch Campaign' : 'Diwali Festive Cookware Campaign';
       const imageRemoved = Boolean(imageWasRemoved || (currentDraft?.image_url && !imagePreview));
+      const durableImageUrl = imageRemoved ? null : (imagePreview || null);
 
       if (apiStatus === 'connected') {
-        // Durable image URL: data: URLs or public https URLs are both fully durable
-        const durableImageUrl = imageRemoved ? null : (imagePreview || null);
-
-        const targetBrandId = activeBrand?.id || '00000000-0000-0000-0000-000000000001';
-        const defaultFallbackTitle = isBrandB ? 'NovaTech ANC 500 Launch Campaign' : 'Diwali Festive Cookware Campaign';
-
-        // If document was uploaded and draft hasn't been created yet, upload draft document directly
-        if (!draftId && docFile) {
+        // Unconditional Document Upload: .docx and .pdf uploads always create a fresh draft with target brand
+        if (docFile) {
           const uploadRes = await api.uploadDraftDocument(docFile, targetBrandId, {
             title: title || defaultFallbackTitle,
             altText: altText || undefined,
             logoConfirmed: logoConfirmed,
             bodyText: bodyText,
           });
-          const resolvedDraft = uploadRes.draft || (await api.getDraft(uploadRes.id || uploadRes.draft_id));
+          let resolvedDraft: Draft;
+          if (uploadRes.draft && uploadRes.draft.id) {
+            resolvedDraft = {
+              ...uploadRes.draft,
+              id: uploadRes.draft.id || uploadRes.id || uploadRes.draft_id,
+              brand_id: uploadRes.draft.brand_id || targetBrandId,
+              title: uploadRes.draft.title || title || defaultFallbackTitle,
+              body_text: uploadRes.draft.body_text || bodyText,
+              status: uploadRes.draft.status || 'checked',
+              findings: uploadRes.findings || uploadRes.draft.findings || [],
+              versions: uploadRes.draft.versions || [
+                { version_no: 1, body_text: bodyText, created_at: new Date().toISOString() },
+              ],
+            };
+          } else {
+            const uploadDraftId = uploadRes.id || uploadRes.draft_id;
+            if (!uploadDraftId) {
+              throw new Error('Document uploaded but no draft ID returned by server');
+            }
+            resolvedDraft = await api.getDraft(uploadDraftId);
+          }
           const findingsList = uploadRes.findings || resolvedDraft.findings || [];
           onReviewCompleted(resolvedDraft, findingsList, uploadRes.llm_review);
           return;
         }
+
+        // Text draft review path: after approval or brand mismatch, start a fresh draft
+        let draftId =
+          currentDraft?.status === 'approved' || currentDraft?.brand_id !== targetBrandId
+            ? null
+            : currentDraft?.id;
 
         // If draft hasn't been created yet, create it
         if (!draftId) {
@@ -348,14 +372,26 @@ export const Submit: React.FC<SubmitProps> = ({
           imagePreview !== (currentDraft?.image_url || null)
         ) {
           // Save latest editor text and image adjustments before review executes
-          const revised = await api.reviseDraft(draftId, {
-            body_text: bodyText,
-            alt_text: altText || null,
-            image_url: durableImageUrl,
-            remove_image: imageRemoved,
-          });
-          // Retain valid server draft ID whether returned as id or draft_id
-          draftId = revised.id || (revised as any).draft_id || draftId;
+          try {
+            const revised = await api.reviseDraft(draftId, {
+              body_text: bodyText,
+              alt_text: altText || null,
+              image_url: durableImageUrl,
+              remove_image: imageRemoved,
+            });
+            draftId = revised.id || (revised as any).draft_id || draftId;
+          } catch (reviseErr) {
+            console.warn('Revise draft failed on stale ID, falling back to fresh draft:', reviseErr);
+            const created = await api.createDraft({
+              brand_id: targetBrandId,
+              title: title || defaultFallbackTitle,
+              body_text: bodyText,
+              alt_text: altText || null,
+              image_url: durableImageUrl,
+              created_by_role: 'guest',
+            });
+            draftId = created.id;
+          }
         }
 
         // Guarantee draft ID is non-null before review and image operations
@@ -396,8 +432,10 @@ export const Submit: React.FC<SubmitProps> = ({
         onReviewCompleted(updatedDraft, reviewRes.findings, reviewRes.llm_review);
       } else {
         // Local demo mode review (when API offline)
-        const targetBrandId = activeBrand?.id || '00000000-0000-0000-0000-000000000001';
-        const defaultFallbackTitle = isBrandB ? 'NovaTech ANC 500 Launch Campaign' : 'Diwali Festive Cookware Campaign';
+        let draftId =
+          currentDraft?.status === 'approved' || currentDraft?.brand_id !== targetBrandId
+            ? null
+            : currentDraft?.id;
         const effectiveImg = imageRemoved ? null : imagePreview;
         const localFindings = runLocalDemoReview(bodyText, altText, effectiveImg);
         const localDraft: Draft = {
@@ -421,8 +459,8 @@ export const Submit: React.FC<SubmitProps> = ({
         };
         onReviewCompleted(localDraft, localFindings);
       }
-
     } catch (err: any) {
+      console.error('Submit review failure:', err);
       setError(err.message || 'Review failed');
     } finally {
       setReviewing(false);
@@ -510,8 +548,25 @@ export const Submit: React.FC<SubmitProps> = ({
       )}
 
       {error && (
-        <div className="mb-6 p-3 rounded-lg bg-red-950/40 border border-red-900 text-red-400 text-sm">
-          {error}
+        <div className="mb-6 p-4 rounded-xl bg-red-950/50 border border-red-800/80 text-red-200 text-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-red-300">Review Request Failed</p>
+              <p className="text-xs text-red-200/80 mt-0.5">{error}. You can retry the review immediately.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setError(null);
+              handleReview();
+            }}
+            disabled={reviewing || docParsing}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-800/80 hover:bg-red-700 text-white text-xs font-bold transition-colors flex-shrink-0 border border-red-700 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${reviewing ? 'animate-spin' : ''}`} />
+            Retry Review
+          </button>
         </div>
       )}
 
@@ -892,10 +947,15 @@ export const Submit: React.FC<SubmitProps> = ({
             )}
             <button
               onClick={handleReview}
-              disabled={reviewing || !bodyText.trim()}
+              disabled={reviewing || docParsing || (!bodyText.trim() && !docFile)}
               className="btn-primary-micro inline-flex items-center gap-2.5 px-8 py-3.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-sm shadow-xl shadow-teal-500/20 disabled:opacity-50"
             >
-              {reviewing ? (
+              {docParsing ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin text-teal-900" />
+                  Extracting Document...
+                </>
+              ) : reviewing ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" />
                   Analyzing against Brand Vault...

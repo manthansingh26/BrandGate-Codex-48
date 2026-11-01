@@ -9,6 +9,7 @@ import { Submit } from './pages/Submit';
 import { Report } from './pages/Report';
 import { Review } from './pages/Review';
 import { Insights } from './pages/Insights';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const pathToTab = (pathname: string): string => {
   const clean = pathname.toLowerCase().replace(/\/+$/, '');
@@ -80,28 +81,15 @@ export const App: React.FC = () => {
 
   const handleBrandChange = async (brand: Brand) => {
     if (activeBrand?.id === brand.id) return;
-    setActiveBrand(brand);
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('brandgate_active_brand_id', brand.id);
-        // Clear previous brand draft state completely (never leak state to new brand)
-        localStorage.removeItem('brandgate_active_draft_id');
-        localStorage.removeItem('brandgate_active_draft');
-        localStorage.removeItem('brandgate_draft_findings');
-        localStorage.removeItem('brandgate_llm_review');
-        sessionStorage.removeItem('brandgate_active_draft');
-        sessionStorage.removeItem('brandgate_draft_findings');
-        sessionStorage.removeItem('brandgate_llm_review');
-      } catch {}
-    }
-    setActiveDraft(null);
-    setDraftFindings([]);
-    setLlmReviewResult(null);
+    setIsRestoringDraft(true);
+    setRestoreError(null);
 
     // Fetch the switched brand's latest draft if one exists (never leak other brand)
     try {
-      setIsRestoringDraft(true);
       const drafts = await api.listDrafts(brand.id);
+      let targetDraft: Draft | null = null;
+      let targetFindings: Finding[] = [];
+
       if (drafts && drafts.length > 0) {
         const latestSummary = drafts[0];
         const fullDraft = await api.getDraft(latestSummary.id);
@@ -116,19 +104,41 @@ export const App: React.FC = () => {
             );
           }
           fullDraft.findings = curFindings;
-          setActiveDraft(fullDraft);
-          setDraftFindings(curFindings);
-          if (typeof window !== 'undefined') {
-            try {
-              localStorage.setItem('brandgate_active_draft_id', fullDraft.id);
-              localStorage.setItem('brandgate_active_draft', JSON.stringify(fullDraft));
-              localStorage.setItem('brandgate_draft_findings', JSON.stringify(curFindings));
-            } catch {}
-          }
+          targetDraft = fullDraft;
+          targetFindings = curFindings;
         }
       }
-    } catch (err) {
+
+      // Atomically switch brand and draft state together so Report never renders blank
+      setActiveBrand(brand);
+      setActiveDraft(targetDraft);
+      setDraftFindings(targetFindings);
+      setLlmReviewResult(null);
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('brandgate_active_brand_id', brand.id);
+          if (targetDraft) {
+            localStorage.setItem('brandgate_active_draft_id', targetDraft.id);
+            localStorage.setItem('brandgate_active_draft', JSON.stringify(targetDraft));
+            localStorage.setItem('brandgate_draft_findings', JSON.stringify(targetFindings));
+          } else {
+            localStorage.removeItem('brandgate_active_draft_id');
+            localStorage.removeItem('brandgate_active_draft');
+            localStorage.removeItem('brandgate_draft_findings');
+          }
+          localStorage.removeItem('brandgate_llm_review');
+          sessionStorage.removeItem('brandgate_active_draft');
+          sessionStorage.removeItem('brandgate_draft_findings');
+          sessionStorage.removeItem('brandgate_llm_review');
+        } catch {}
+      }
+    } catch (err: any) {
       console.warn('Could not load latest draft for switched brand:', err);
+      setActiveBrand(brand);
+      setActiveDraft(null);
+      setDraftFindings([]);
+      setRestoreError(err?.message || 'Failed to restore draft for brand');
     } finally {
       setIsRestoringDraft(false);
     }
@@ -219,6 +229,7 @@ export const App: React.FC = () => {
   });
 
   const [isRestoringDraft, setIsRestoringDraft] = useState<boolean>(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
 
   // Restore draft from backend on fresh tab / deep link (/report or /review)
   useEffect(() => {
@@ -518,19 +529,28 @@ export const App: React.FC = () => {
             />
           )}
           {activeTab === 'report' && (
-            <Report
-              draft={activeDraft && activeDraft.brand_id === activeBrand?.id ? activeDraft : null}
-              findings={activeDraft && activeDraft.brand_id === activeBrand?.id ? draftFindings : []}
-              llmReview={activeDraft && activeDraft.brand_id === activeBrand?.id ? llmReviewResult : null}
-              onDraftUpdated={handleDraftUpdated}
-              onNavigateToReview={() => navigateToTab('review')}
-              onNavigateToSubmit={() => navigateToTab('submit')}
-              apiStatus={apiStatus}
-              isRestoringDraft={isRestoringDraft}
-              availableBrands={availableBrands}
-              activeBrand={activeBrand}
-              onSelectBrand={handleBrandChange}
-            />
+            <ErrorBoundary
+              fallbackTitle="Unable to render Report"
+              onRetry={() => {
+                if (activeBrand) handleBrandChange(activeBrand);
+              }}
+            >
+              <Report
+                draft={activeDraft && activeDraft.brand_id === activeBrand?.id ? activeDraft : null}
+                findings={activeDraft && activeDraft.brand_id === activeBrand?.id ? draftFindings : []}
+                llmReview={activeDraft && activeDraft.brand_id === activeBrand?.id ? llmReviewResult : null}
+                onDraftUpdated={handleDraftUpdated}
+                onNavigateToReview={() => navigateToTab('review')}
+                onNavigateToSubmit={() => navigateToTab('submit')}
+                apiStatus={apiStatus}
+                isRestoringDraft={isRestoringDraft}
+                restoreError={restoreError}
+                onRetryRestore={() => activeBrand && handleBrandChange(activeBrand)}
+                availableBrands={availableBrands}
+                activeBrand={activeBrand}
+                onSelectBrand={handleBrandChange}
+              />
+            </ErrorBoundary>
           )}
           {activeTab === 'review' && (
             <Review

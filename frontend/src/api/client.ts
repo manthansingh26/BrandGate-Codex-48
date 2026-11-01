@@ -260,30 +260,47 @@ class ApiClient {
     return res.json();
   }
 
-  async getDraft(draftId: string): Promise<Draft> {
-    const res = await fetch(`${this.base}/api/drafts/${draftId}`, {
-      headers: this.getHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to fetch draft');
-    const data: Draft = await res.json();
-    if (data.findings && Array.isArray(data.findings)) {
-      data.findings.forEach((f: Finding) => {
-        if (f.page === undefined || f.page === null) {
-          const m = f.explanation?.match(/\[Page\s+(\d+)\]/i);
-          if (m) f.page = parseInt(m[1], 10);
+  async getDraft(draftId: string, retries = 2): Promise<Draft> {
+    let lastError: any = null;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const res = await fetch(`${this.base}/api/drafts/${draftId}`, {
+          headers: this.getHeaders(),
+        });
+        if (!res.ok) {
+          if (attempt < retries) {
+            await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+            continue;
+          }
+          throw new Error('Failed to fetch draft');
         }
-      });
-      const curV = data.current_version || 1;
-      data.findings = data.findings.filter(
-        (f: Finding) => f.version_no === curV || (curV === 1 && (f.version_no === undefined || f.version_no === null))
-      );
-      if (!data.image_url) {
-        data.findings = data.findings.filter(
-          (f: Finding) => !['P-01', 'P-10', 'A-02', 'R-09'].includes(f.citation_id)
-        );
+        const data: Draft = await res.json();
+        if (data.findings && Array.isArray(data.findings)) {
+          data.findings.forEach((f: Finding) => {
+            if (f.page === undefined || f.page === null) {
+              const m = f.explanation?.match(/\[Page\s+(\d+)\]/i);
+              if (m) f.page = parseInt(m[1], 10);
+            }
+          });
+          const curV = data.current_version || 1;
+          data.findings = data.findings.filter(
+            (f: Finding) => f.version_no === curV || (curV === 1 && (f.version_no === undefined || f.version_no === null))
+          );
+          if (!data.image_url) {
+            data.findings = data.findings.filter(
+              (f: Finding) => !['P-01', 'P-10', 'A-02', 'R-09'].includes(f.citation_id)
+            );
+          }
+        }
+        return data;
+      } catch (err) {
+        lastError = err;
+        if (attempt < retries) {
+          await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+        }
       }
     }
-    return data;
+    throw lastError || new Error('Failed to fetch draft');
   }
 
   async reviewDraft(
