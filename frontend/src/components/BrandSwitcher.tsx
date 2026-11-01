@@ -19,6 +19,7 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
 }) => {
   const [isOpen, setIsOpen] = React.useState(false);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
+  const menuRef = React.useRef<HTMLDivElement>(null);
 
   // Close dropdown on click outside
   React.useEffect(() => {
@@ -30,6 +31,29 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Viewport-safe boundary adjustment: ensure menu never clips left or right edge of viewport
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const adjustPosition = () => {
+      if (menuRef.current) {
+        menuRef.current.style.transform = '';
+        const menuRect = menuRef.current.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const safeMargin = 8;
+        if (menuRect.left < safeMargin) {
+          const shiftRight = safeMargin - menuRect.left;
+          menuRef.current.style.transform = `translateX(${shiftRight}px)`;
+        } else if (menuRect.right > viewportWidth - safeMargin) {
+          const shiftLeft = menuRect.right - (viewportWidth - safeMargin);
+          menuRef.current.style.transform = `translateX(-${shiftLeft}px)`;
+        }
+      }
+    };
+    adjustPosition();
+    window.addEventListener('resize', adjustPosition);
+    return () => window.removeEventListener('resize', adjustPosition);
+  }, [isOpen]);
 
   if (variant === 'pills') {
     return (
@@ -84,8 +108,9 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
 
       {isOpen && (
         <div
+          ref={menuRef}
           id="brand-switcher-menu"
-          className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-64 rounded-xl bg-[#090D14] border border-zinc-800 shadow-xl shadow-black/60 z-50 py-1.5 focus:outline-none backdrop-blur-md"
+          className="absolute left-0 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-xl bg-[#090D14] border border-zinc-800 shadow-xl shadow-black/60 z-50 py-1.5 focus:outline-none backdrop-blur-md"
         >
           <div className="px-3 py-1.5 border-b border-zinc-800/80 mb-1">
             <span className="text-[10px] font-mono tracking-wider uppercase text-zinc-400">
