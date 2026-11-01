@@ -35,6 +35,16 @@ load_dotenv(override=True)
 
 DEMO_BRAND_ID = "00000000-0000-0000-0000-000000000001"
 
+# Guest demo draft aliases in-memory map to canonical database UUIDs
+_DEMO_DRAFT_MAPPINGS: Dict[str, str] = {}
+
+def is_valid_uuid(val: Any) -> bool:
+    try:
+        uuid.UUID(str(val).strip())
+        return True
+    except (ValueError, TypeError, AttributeError):
+        return False
+
 # Thread pool executor and persistent cache for grounded LLM reviews (B1 decoupling & timeout protection)
 _LLM_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 _DRAFT_LAST_LLM_REVIEW: Dict[str, Dict[str, Any]] = {}
@@ -179,14 +189,71 @@ def verify_draft_access(supabase, draft_id: str, user: Optional[Dict[str, Any]],
     Fetches draft and verifies caller has legitimate tenant / role access:
     - Guests can ONLY access drafts belonging to DEMO_BRAND_ID.
     - If user is present, verifies role matches required_role (if specified).
+    - Safely resolves guest demo draft aliases (local-draft-*, demo, etc.) without SQL syntax errors.
     """
-    draft_res = supabase.table("drafts").select("*").eq("id", draft_id).execute()
-    if not draft_res.data:
+    draft_id_str = str(draft_id).strip()
+
+    is_demo_alias = (
+        draft_id_str.startswith("local-draft-") or
+        draft_id_str.startswith("local-") or
+        draft_id_str.lower() in ("demo", "demo-draft", "guest-demo", "default")
+    )
+
+    # First, if it is a demo alias and we have a mapped real UUID, use that
+    if is_demo_alias:
+        mapped_uuid = _DEMO_DRAFT_MAPPINGS.get(draft_id_str)
+        if mapped_uuid:
+            try:
+                res = supabase.table("drafts").select("*").eq("id", mapped_uuid).execute()
+                if res.data:
+                    return res.data[0]
+            except Exception:
+                pass
+
+    # Try querying drafts table directly (handles real UUIDs as well as test mocks)
+    draft_res = None
+    try:
+        draft_res = supabase.table("drafts").select("*").eq("id", draft_id_str).execute()
+    except Exception as e:
+        # PostgreSQL syntax error 22P02 for invalid UUID syntax
+        if "22P02" in str(e) or "invalid input syntax for type uuid" in str(e):
+            draft_res = None
+        else:
+            raise
+
+    if draft_res and draft_res.data:
+        draft = draft_res.data[0]
+    elif is_demo_alias:
+        # Initialize fresh demo draft for DEMO_BRAND_ID with locked test creative
+        LOCKED_DEMO_TEXT = "Diwali Dhamaka! India's No. 1 cookware brand — clinically proven non-stick — now for just Rs. 999!"
+        demo_record = {
+            "brand_id": DEMO_BRAND_ID,
+            "title": "Diwali Festive Cookware Campaign",
+            "body_text": LOCKED_DEMO_TEXT,
+            "alt_text": None,
+            "image_url": None,
+            "status": "draft",
+            "current_version": 1,
+            "created_by_role": "guest",
+        }
+        res = supabase.table("drafts").insert(demo_record).execute()
+        if not res.data:
+            raise HTTPException(status_code=500, detail="Failed to initialize demo draft")
+        draft = res.data[0]
+        actual_id = draft["id"]
+        supabase.table("draft_versions").insert({
+            "draft_id": actual_id,
+            "version_no": 1,
+            "body_text": LOCKED_DEMO_TEXT,
+            "alt_text": None,
+        }).execute()
+        _DEMO_DRAFT_MAPPINGS[draft_id_str] = actual_id
+    else:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Draft '{draft_id}' not found."
         )
-    draft = draft_res.data[0]
+
     brand_id = draft.get("brand_id")
 
     if not user:
@@ -523,12 +590,13 @@ def get_draft(draft_id: str, request: Request = None):
 
     # Tenant isolation & ownership check
     draft = verify_draft_access(supabase, draft_id, user)
+    actual_id = draft["id"]
 
     # Fetch versions, findings, comments, decisions
-    versions_res = supabase.table("draft_versions").select("*").eq("draft_id", draft_id).order("version_no").execute()
-    findings_res = supabase.table("findings").select("*").eq("draft_id", draft_id).order("created_at").execute()
-    comments_res = supabase.table("comments").select("*").eq("draft_id", draft_id).order("created_at").execute()
-    decisions_res = supabase.table("decisions").select("*").eq("draft_id", draft_id).order("created_at").execute()
+    versions_res = supabase.table("draft_versions").select("*").eq("draft_id", actual_id).order("version_no").execute()
+    findings_res = supabase.table("findings").select("*").eq("draft_id", actual_id).order("created_at").execute()
+    comments_res = supabase.table("comments").select("*").eq("draft_id", actual_id).order("created_at").execute()
+    decisions_res = supabase.table("decisions").select("*").eq("draft_id", actual_id).order("created_at").execute()
 
     draft["versions"] = versions_res.data or []
     draft["findings"] = findings_res.data or []
@@ -594,6 +662,7 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
 
     # Tenant isolation & authorization check
     draft = verify_draft_access(supabase, draft_id, user)
+    actual_id = draft["id"]
 
     # Fetch ACTIVE vault items only for the draft's brand (archived items strictly excluded)
     vault_res = (
@@ -623,14 +692,14 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
     current_version = draft.get("current_version", 1)
 
     # Clear previous findings for this version to allow clean re-reviews
-    supabase.table("findings").delete().eq("draft_id", draft_id).eq("version_no", current_version).execute()
+    supabase.table("findings").delete().eq("draft_id", actual_id).eq("version_no", current_version).execute()
 
     # Save validated findings to database
     saved_findings = []
     if validated_findings:
         findings_to_insert = [
             {
-                "draft_id": draft_id,
+                "draft_id": actual_id,
                 "version_no": current_version,
                 "lane": f["lane"],
                 "severity": f["severity"],
@@ -646,7 +715,7 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
     # Update draft status to "checked"
     supabase.table("drafts").update({
         "status": "checked"
-    }).eq("id", draft_id).execute()
+    }).eq("id", actual_id).execute()
 
     # Run Grounded LLM Review asynchronously with a strict 4.0s timeout gate
     def _execute_llm():
@@ -663,7 +732,7 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
     try:
         llm_result = llm_future.result(timeout=4.0)
     except concurrent.futures.TimeoutError:
-        logger.warning(f"[BrandGate Review] Gemini LLM review timed out after 4.0s for draft {draft_id}")
+        logger.warning(f"[BrandGate Review] Gemini LLM review timed out after 4.0s for draft {actual_id}")
         llm_result = {
             "available": False,
             "status": "timeout",
@@ -672,7 +741,7 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
             "findings": []
         }
     except Exception as exc:
-        logger.warning(f"[BrandGate Review] Gemini LLM review failed for draft {draft_id}: {exc}")
+        logger.warning(f"[BrandGate Review] Gemini LLM review failed for draft {actual_id}: {exc}")
         llm_result = {
             "available": False,
             "status": "error",
@@ -683,9 +752,11 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
 
     # Preserve last successful LLM review state so AI counts never drop to 0 on timeout
     if llm_result.get("status") == "success" and llm_result.get("findings"):
-        _DRAFT_LAST_LLM_REVIEW[draft_id] = llm_result
-    elif draft_id in _DRAFT_LAST_LLM_REVIEW and (not llm_result.get("findings") or llm_result.get("status") in ("timeout", "LLM review unavailable", "error")):
-        cached_review = _DRAFT_LAST_LLM_REVIEW[draft_id]
+        _DRAFT_LAST_LLM_REVIEW[actual_id] = llm_result
+        if draft_id != actual_id:
+            _DRAFT_LAST_LLM_REVIEW[draft_id] = llm_result
+    elif (actual_id in _DRAFT_LAST_LLM_REVIEW or draft_id in _DRAFT_LAST_LLM_REVIEW) and (not llm_result.get("findings") or llm_result.get("status") in ("timeout", "LLM review unavailable", "error")):
+        cached_review = _DRAFT_LAST_LLM_REVIEW.get(actual_id) or _DRAFT_LAST_LLM_REVIEW.get(draft_id)
         llm_result = {
             **cached_review,
             "cached": True,
@@ -694,6 +765,8 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
         }
 
     return {
+        "id": actual_id,
+        "draft_id": actual_id,
         "deterministic_findings": saved_findings,
         "llm_review": llm_result,
         "findings": saved_findings
@@ -707,6 +780,7 @@ def attach_image(draft_id: str, payload: AttachImageRequest, request: Request = 
 
     # Tenant isolation & authorization check
     draft = verify_draft_access(supabase, draft_id, user)
+    actual_id = draft["id"]
 
     current_ver = draft.get("current_version", 1)
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -718,7 +792,7 @@ def attach_image(draft_id: str, payload: AttachImageRequest, request: Request = 
         new_alt = payload.alt_text if payload.alt_text is not None else draft.get("alt_text")
 
         supabase.table("draft_versions").insert({
-            "draft_id": draft_id,
+            "draft_id": actual_id,
             "version_no": new_version_no,
             "body_text": draft.get("body_text", ""),
             "alt_text": new_alt,
@@ -730,7 +804,7 @@ def attach_image(draft_id: str, payload: AttachImageRequest, request: Request = 
             "current_version": new_version_no,
             "status": "draft",
             "updated_at": now_iso,
-        }).eq("id", draft_id).execute()
+        }).eq("id", actual_id).execute()
 
         current_ver = new_version_no
     else:
@@ -741,18 +815,18 @@ def attach_image(draft_id: str, payload: AttachImageRequest, request: Request = 
         if payload.alt_text is not None:
             update_fields["alt_text"] = payload.alt_text
 
-        supabase.table("drafts").update(update_fields).eq("id", draft_id).execute()
+        supabase.table("drafts").update(update_fields).eq("id", actual_id).execute()
 
     if payload.logo_confirmed:
         supabase.table("decisions").insert({
-            "draft_id": draft_id,
+            "draft_id": actual_id,
             "version_no": current_ver,
             "role": user["role"] if user else "reviewer",
             "decision": "re_review",
             "comment": "Reviewer confirmed current approved logo file only (A-02). Archived logos not accepted.",
         }).execute()
 
-    return {"status": "image_attached", "draft_id": draft_id, "image_url": payload.image_url, "version_no": current_ver}
+    return {"status": "image_attached", "id": actual_id, "draft_id": actual_id, "image_url": payload.image_url, "version_no": current_ver}
 
 @app.get("/api/insights", summary="Real database session counts grouped by citation ID")
 def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID"), request: Request = None):
@@ -817,6 +891,7 @@ def apply_fix(draft_id: str, payload: ApplyFixRequest, request: Request = None):
     supabase = get_supabase()
 
     draft = verify_draft_access(supabase, draft_id, user)
+    actual_id = draft["id"]
 
     finding_res = supabase.table("findings").select("*").eq("id", payload.finding_id).execute()
     if not finding_res.data:
@@ -826,7 +901,7 @@ def apply_fix(draft_id: str, payload: ApplyFixRequest, request: Request = None):
         )
     finding = finding_res.data[0]
 
-    if finding.get("draft_id") != draft_id:
+    if finding.get("draft_id") != actual_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Finding does not belong to this draft."
@@ -843,7 +918,7 @@ def apply_fix(draft_id: str, payload: ApplyFixRequest, request: Request = None):
 
     new_version_no = draft.get("current_version", 1) + 1
     version_record = {
-        "draft_id": draft_id,
+        "draft_id": actual_id,
         "version_no": new_version_no,
         "body_text": new_body,
         "alt_text": draft.get("alt_text")
@@ -855,11 +930,11 @@ def apply_fix(draft_id: str, payload: ApplyFixRequest, request: Request = None):
         "current_version": new_version_no,
         "status": "draft",
         "updated_at": datetime.now(timezone.utc).isoformat(),
-    }).eq("id", draft_id).execute()
+    }).eq("id", actual_id).execute()
 
     return {
-        "id": draft_id,
-        "draft_id": draft_id,
+        "id": actual_id,
+        "draft_id": actual_id,
         "version_no": new_version_no,
         "body_text": new_body,
         "status": "draft"
@@ -872,10 +947,11 @@ def revise_draft(draft_id: str, payload: ReviseDraftRequest, request: Request = 
     supabase = get_supabase()
 
     draft = verify_draft_access(supabase, draft_id, user)
+    actual_id = draft["id"]
 
     new_version_no = draft.get("current_version", 1) + 1
     version_record = {
-        "draft_id": draft_id,
+        "draft_id": actual_id,
         "version_no": new_version_no,
         "body_text": payload.body_text,
         "alt_text": payload.alt_text if payload.alt_text is not None else draft.get("alt_text")
@@ -891,12 +967,12 @@ def revise_draft(draft_id: str, payload: ReviseDraftRequest, request: Request = 
     if payload.alt_text is not None:
         update_data["alt_text"] = payload.alt_text
 
-    supabase.table("drafts").update(update_data).eq("id", draft_id).execute()
+    supabase.table("drafts").update(update_data).eq("id", actual_id).execute()
 
     # Return normalized response containing both 'id' and 'draft_id' (Blocker 2)
     return {
-        "id": draft_id,
-        "draft_id": draft_id,
+        "id": actual_id,
+        "draft_id": actual_id,
         "version_no": new_version_no,
         "body_text": payload.body_text,
         "alt_text": update_data.get("alt_text"),
@@ -913,6 +989,7 @@ def request_approval(draft_id: str, payload: RequestApprovalRequest, request: Re
     supabase = get_supabase()
 
     draft = verify_draft_access(supabase, draft_id, user)
+    actual_id = draft["id"]
 
     # Server-side state machine check: must be in "checked" or "needs_changes" status
     if draft.get("status") not in ["checked", "needs_changes"]:
@@ -925,18 +1002,18 @@ def request_approval(draft_id: str, payload: RequestApprovalRequest, request: Re
     supabase.table("drafts").update({
         "status": "pending_approval",
         "updated_at": now_iso,
-    }).eq("id", draft_id).execute()
+    }).eq("id", actual_id).execute()
 
     role_to_log = user["role"] if user else "creator"
     supabase.table("decisions").insert({
-        "draft_id": draft_id,
+        "draft_id": actual_id,
         "version_no": draft.get("current_version", 1),
         "role": role_to_log,
         "decision": "request_approval",
         "comment": payload.comment or "Submitted for brand reviewer approval",
     }).execute()
 
-    return {"status": "pending_approval", "draft_id": draft_id}
+    return {"status": "pending_approval", "id": actual_id, "draft_id": actual_id}
 
 @app.post("/api/drafts/{draft_id}/approve", summary="Approve draft (Reviewer only)")
 def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request = None):
@@ -945,6 +1022,7 @@ def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request 
     supabase = get_supabase()
 
     draft = verify_draft_access(supabase, draft_id, user)
+    actual_id = draft["id"]
 
     # State machine check
     if draft.get("status") != "pending_approval":
@@ -983,7 +1061,7 @@ def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request 
     findings_res = (
         supabase.table("findings")
         .select("*")
-        .eq("draft_id", draft_id)
+        .eq("draft_id", actual_id)
         .eq("version_no", current_ver)
         .execute()
     )
@@ -1028,7 +1106,7 @@ def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request 
     supabase.table("drafts").update({
         "status": "approved",
         "updated_at": now_iso,
-    }).eq("id", draft_id).execute()
+    }).eq("id", actual_id).execute()
 
     brand_name = "Demo Brand (Seeded)"
     if draft.get("brand_id") != DEMO_BRAND_ID:
@@ -1050,7 +1128,7 @@ def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request 
     }
 
     supabase.table("decisions").insert({
-        "draft_id": draft_id,
+        "draft_id": actual_id,
         "version_no": draft.get("current_version", 1),
         "role": approver_role,
         "decision": "approve",
@@ -1059,7 +1137,8 @@ def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request 
 
     return {
         "status": "approved",
-        "draft_id": draft_id,
+        "id": actual_id,
+        "draft_id": actual_id,
         "snapshot": locked_snapshot,
     }
 
@@ -1070,6 +1149,7 @@ def request_changes(draft_id: str, payload: RequestChangesRequest, request: Requ
     supabase = get_supabase()
 
     draft = verify_draft_access(supabase, draft_id, user)
+    actual_id = draft["id"]
 
     if user:
         if user.get("role") != "reviewer":
@@ -1090,10 +1170,10 @@ def request_changes(draft_id: str, payload: RequestChangesRequest, request: Requ
     supabase.table("drafts").update({
         "status": "needs_changes",
         "updated_at": now_iso,
-    }).eq("id", draft_id).execute()
+    }).eq("id", actual_id).execute()
 
     supabase.table("decisions").insert({
-        "draft_id": draft_id,
+        "draft_id": actual_id,
         "version_no": draft.get("current_version", 1),
         "role": approver_role,
         "decision": "request_changes",
@@ -1102,7 +1182,8 @@ def request_changes(draft_id: str, payload: RequestChangesRequest, request: Requ
 
     return {
         "status": "needs_changes",
-        "draft_id": draft_id,
+        "id": actual_id,
+        "draft_id": actual_id,
         "comment": payload.comment,
     }
 
@@ -1113,10 +1194,11 @@ def add_comment(draft_id: str, payload: AddCommentRequest, request: Request = No
     supabase = get_supabase()
 
     draft = verify_draft_access(supabase, draft_id, user)
+    actual_id = draft["id"]
 
     author_role = user["role"] if user else "guest"
     comment_record = {
-        "draft_id": draft_id,
+        "draft_id": actual_id,
         "version_no": draft.get("current_version", 1),
         "role": author_role,
         "text": payload.text,
