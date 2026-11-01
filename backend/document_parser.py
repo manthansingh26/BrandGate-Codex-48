@@ -39,10 +39,24 @@ def extract_palette_from_vault(vault_items: Optional[List[Dict[str, Any]]] = Non
         return list(dict.fromkeys(found_hexes))
     return BRAND_A_PALETTE
 
+def get_relative_luminance(rgb: Tuple[int, int, int]) -> float:
+    r, g, b = [c / 255.0 for c in rgb]
+    r = r / 12.92 if r <= 0.03928 else ((r + 0.055) / 1.055) ** 2.4
+    g = g / 12.92 if g <= 0.03928 else ((g + 0.055) / 1.055) ** 2.4
+    b = b / 12.92 if b <= 0.03928 else ((b + 0.055) / 1.055) ** 2.4
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+def calculate_contrast(rgb1: Tuple[int, int, int], rgb2: Tuple[int, int, int]) -> float:
+    l1 = get_relative_luminance(rgb1)
+    l2 = get_relative_luminance(rgb2)
+    lighter = max(l1, l2)
+    darker = min(l1, l2)
+    return round((lighter + 0.05) / (darker + 0.05), 1)
+
 def analyze_image_bytes(image_bytes: bytes, approved_palette: List[str], threshold: float = 100.0) -> Dict[str, Any]:
     """
     Analyzes an extracted image: samples dominant colors, checks alignment with approved palette,
-    and returns a base64 data URL.
+    calculates WCAG 2.1 AA contrast ratio between dominant colors, and returns a base64 data URL.
     """
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
@@ -63,6 +77,12 @@ def analyze_image_bytes(image_bytes: bytes, approved_palette: List[str], thresho
 
         dominant_hexes = [f"#{c[0]:02X}{c[1]:02X}{c[2]:02X}" for c in dominant_rgbs]
 
+        # Contrast calculation between lightest and darkest sampled colors
+        contrast_ratio = None
+        if len(dominant_rgbs) >= 2:
+            sorted_by_lum = sorted(dominant_rgbs, key=get_relative_luminance)
+            contrast_ratio = calculate_contrast(sorted_by_lum[-1], sorted_by_lum[0])
+
         # Determine format for data URL
         fmt = img.format or "PNG"
         mime_type = f"image/{fmt.lower()}" if fmt.lower() in ("png", "jpeg", "webp") else "image/png"
@@ -74,6 +94,7 @@ def analyze_image_bytes(image_bytes: bytes, approved_palette: List[str], thresho
             "data_url": data_url,
             "sampled_colors": dominant_hexes,
             "is_off_palette": is_off_palette,
+            "contrast_ratio": contrast_ratio,
             "error": None
         }
     except Exception as exc:
@@ -83,7 +104,8 @@ def analyze_image_bytes(image_bytes: bytes, approved_palette: List[str], thresho
             "data_url": None,
             "sampled_colors": [],
             "is_off_palette": False,
-            "error": "Image could not be extracted — check manually"
+            "contrast_ratio": None,
+            "error": "Could not sample — human decision"
         }
 
 def extract_docx(file_bytes: bytes, approved_palette: List[str]) -> Dict[str, Any]:
@@ -129,17 +151,20 @@ def extract_docx(file_bytes: bytes, approved_palette: List[str]) -> Dict[str, An
                             "data_url": analysis["data_url"],
                             "sampled_colors": analysis["sampled_colors"],
                             "is_off_palette": analysis["is_off_palette"],
+                            "contrast_ratio": analysis.get("contrast_ratio"),
                         })
                     else:
                         images_unextractable = True
-                        unextractable_reason = "Image could not be extracted — check manually"
+                        unextractable_reason = "Could not sample — human decision"
                 except Exception:
                     images_unextractable = True
-                    unextractable_reason = "Image could not be extracted — check manually"
+                    unextractable_reason = "Could not sample — human decision"
     except Exception as zip_exc:
         logger.warning(f"Zip extraction error on DOCX: {zip_exc}")
 
     is_any_off_palette = any(img.get("is_off_palette") for img in images)
+    contrast_ratios = [img.get("contrast_ratio") for img in images if img.get("contrast_ratio") is not None]
+    min_contrast = min(contrast_ratios) if contrast_ratios else None
 
     return {
         "file_type": "docx",
@@ -151,8 +176,10 @@ def extract_docx(file_bytes: bytes, approved_palette: List[str]) -> Dict[str, An
         "has_images": len(images) > 0,
         "images": images,
         "images_unextractable": images_unextractable,
+        "palette_unsampleable": images_unextractable,
         "unextractable_reason": unextractable_reason,
         "is_off_palette": is_any_off_palette,
+        "contrast_ratio": min_contrast,
     }
 
 def extract_pdf(file_bytes: bytes, approved_palette: List[str]) -> Dict[str, Any]:
@@ -192,7 +219,7 @@ def extract_pdf(file_bytes: bytes, approved_palette: List[str]) -> Dict[str, Any
                     extracted = doc.extract_image(xref)
                     if not extracted or not extracted.get("image"):
                         images_unextractable = True
-                        unextractable_reason = "Image could not be extracted — check manually"
+                        unextractable_reason = "Could not sample — human decision"
                         continue
                     img_bytes = extracted["image"]
                     analysis = analyze_image_bytes(img_bytes, approved_palette)
@@ -203,16 +230,17 @@ def extract_pdf(file_bytes: bytes, approved_palette: List[str]) -> Dict[str, Any
                             "data_url": analysis["data_url"],
                             "sampled_colors": analysis["sampled_colors"],
                             "is_off_palette": analysis["is_off_palette"],
+                            "contrast_ratio": analysis.get("contrast_ratio"),
                         })
                     else:
                         images_unextractable = True
-                        unextractable_reason = "Image could not be extracted — check manually"
+                        unextractable_reason = "Could not sample — human decision"
                 except Exception:
                     images_unextractable = True
-                    unextractable_reason = "Image could not be extracted — check manually"
+                    unextractable_reason = "Could not sample — human decision"
         except Exception:
             images_unextractable = True
-            unextractable_reason = "Image could not be extracted — check manually"
+            unextractable_reason = "Could not sample — human decision"
 
     total_text_len = sum(len(p["text"]) for p in pages)
     has_text_layer = total_text_len > 0
@@ -226,6 +254,8 @@ def extract_pdf(file_bytes: bytes, approved_palette: List[str]) -> Dict[str, Any
         )
 
     is_any_off_palette = any(img.get("is_off_palette") for img in images)
+    contrast_ratios = [img.get("contrast_ratio") for img in images if img.get("contrast_ratio") is not None]
+    min_contrast = min(contrast_ratios) if contrast_ratios else None
 
     return {
         "file_type": "pdf",
@@ -237,8 +267,10 @@ def extract_pdf(file_bytes: bytes, approved_palette: List[str]) -> Dict[str, Any
         "has_images": len(images) > 0,
         "images": images,
         "images_unextractable": images_unextractable,
+        "palette_unsampleable": images_unextractable,
         "unextractable_reason": unextractable_reason,
         "is_off_palette": is_any_off_palette,
+        "contrast_ratio": min_contrast,
     }
 
 def parse_document(file_bytes: bytes, filename: str, active_vault_items: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:

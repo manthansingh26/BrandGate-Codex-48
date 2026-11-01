@@ -1,4 +1,4 @@
-import { Brand, GroupedVault, VaultItem, Draft, Finding, ApiConnectionStatus, DocumentParseResult } from '../types';
+import { Brand, GroupedVault, VaultItem, Draft, Finding, ApiConnectionStatus, DocumentParseResult, InsightsData } from '../types';
 
 const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || 'http://localhost:8000';
 
@@ -268,7 +268,7 @@ class ApiClient {
     return res.json();
   }
 
-  async reviewDraft(draftId: string, options?: { logo_confirmed?: boolean; palette_off?: boolean; contrast_ratio?: number }): Promise<{
+  async reviewDraft(draftId: string, options?: { logo_confirmed?: boolean; palette_off?: boolean; contrast_ratio?: number; palette_unsampleable?: boolean }): Promise<{
     findings: Finding[];
     llm_review?: any;
   }> {
@@ -397,11 +397,7 @@ class ApiClient {
     return res.json();
   }
 
-  async getInsights(brandId?: string): Promise<{
-    total_findings: number;
-    counts_by_citation: Record<string, number>;
-    counts_by_lane: Record<string, number>;
-  }> {
+  async getInsights(brandId?: string): Promise<InsightsData> {
     const url = brandId ? `${this.base}/api/insights?brand_id=${brandId}` : `${this.base}/api/insights`;
     const res = await fetch(url, { headers: this.getHeaders() });
     if (!res.ok) {

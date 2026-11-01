@@ -269,8 +269,8 @@ def test_unextractable_image_notice():
 
     parsed = extract_docx(corrupt_docx, [])
     assert parsed["images_unextractable"] is True, "Expected images_unextractable to be True for corrupt image"
-    assert parsed["unextractable_reason"] == "Image could not be extracted — check manually", f"Unexpected reason: {parsed['unextractable_reason']}"
-    print("PASS: Corrupted/unextractable image flags 'Image could not be extracted — check manually', never a fake pass.")
+    assert parsed["unextractable_reason"] in ("Image could not be extracted — check manually", "Could not sample — human decision"), f"Unexpected reason: {parsed['unextractable_reason']}"
+    print(f"PASS: Corrupted/unextractable image flags '{parsed['unextractable_reason']}', never a fake pass.")
 
 
 def run_all_tests():

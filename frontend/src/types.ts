@@ -122,11 +122,55 @@ export interface ReviseDraftResponse {
   status: DraftStatus;
 }
 
+export interface TopCitation {
+  citation_id: string;
+  count: number;
+  title: string;
+  kind: string;
+}
+
+export interface TopViolationType {
+  lane: string;
+  label: string;
+  count: number;
+}
+
+export interface InsightsTrend {
+  status: 'improving' | 'worsening' | 'stable' | 'no_data';
+  description: string;
+  recent_draft_findings: number;
+  prior_draft_findings: number;
+}
+
+export interface DispositionsCount {
+  clear_to_publish: number;
+  clear_with_edits: number;
+  hold_for_legal: number;
+}
+
+export interface DraftTimelineItem {
+  id: string;
+  title: string;
+  created_at?: string;
+  findings_count: number;
+  disposition: 'Clear to Publish' | 'Clear with Edits' | 'Hold for Legal';
+  has_contradiction: boolean;
+}
+
 export interface InsightsData {
   brand_id?: string;
+  brand_name?: string;
+  generated_at?: string;
+  total_drafts?: number;
   total_findings: number;
   counts_by_citation: Record<string, number>;
   counts_by_lane: Record<string, number>;
+  dispositions?: DispositionsCount;
+  top_citation?: TopCitation | null;
+  top_violation_type?: TopViolationType | null;
+  trend?: InsightsTrend;
+  fix_first?: string;
+  drafts_timeline?: DraftTimelineItem[];
 }
 
 export interface LlmReviewResult {

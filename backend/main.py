@@ -826,6 +826,8 @@ async def upload_draft_document(
     }
 
     pages_to_pass = parsed.get("pages") if parsed.get("file_type") == "pdf" else None
+    contrast_to_pass = parsed.get("contrast_ratio")
+    palette_unsampleable = parsed.get("palette_unsampleable", False)
     validated_findings = run_deterministic_review(
         body_text=parsed["text"],
         alt_text=alt_text,
@@ -833,8 +835,9 @@ async def upload_draft_document(
         active_vault_items=active_vault_items,
         logo_confirmed=bool(logo_confirmed),
         palette_off=parsed.get("is_off_palette", False),
-        contrast_ratio=None,
+        contrast_ratio=contrast_to_pass,
         pages=pages_to_pass,
+        palette_unsampleable=palette_unsampleable,
     )
 
     saved_findings = []
@@ -854,8 +857,14 @@ async def upload_draft_document(
         insert_res = supabase.table("findings").insert(findings_to_insert).execute()
         saved_findings = insert_res.data or []
 
-    for f in saved_findings:
+    for idx, f in enumerate(saved_findings):
         f["brand_id"] = brand_id
+        if idx < len(validated_findings) and "page" in validated_findings[idx]:
+            f["page"] = validated_findings[idx]["page"]
+        elif f.get("explanation", "").startswith("[Page "):
+            page_m = re.match(r"^\[Page\s+(\d+)\]", f.get("explanation", ""))
+            if page_m:
+                f["page"] = int(page_m.group(1))
 
     supabase.table("drafts").update({"status": "checked"}).eq("id", actual_id).execute()
     created_draft["status"] = "checked"
@@ -903,6 +912,10 @@ def get_draft(draft_id: str, request: Request = None):
     findings_data = findings_res.data or []
     for f in findings_data:
         f["brand_id"] = draft["brand_id"]
+        if "page" not in f and f.get("explanation", "").startswith("[Page "):
+            page_m = re.match(r"^\[Page\s+(\d+)\]", f.get("explanation", ""))
+            if page_m:
+                f["page"] = int(page_m.group(1))
 
     draft["versions"] = versions_res.data or []
     draft["findings"] = findings_data
@@ -1000,11 +1013,16 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
     logo_confirmed = payload.logo_confirmed if payload else False
     palette_off = payload.palette_off if payload else False
     contrast_ratio = payload.contrast_ratio if payload else None
+    palette_unsampleable = payload.palette_unsampleable if payload else False
 
     cached_pages = _DRAFT_PAGES.get(actual_id) or _DRAFT_PAGES.get(draft_id)
     doc_meta = _DRAFT_DOC_META.get(actual_id) or _DRAFT_DOC_META.get(draft_id) or {}
     if not palette_off and doc_meta.get("is_off_palette"):
         palette_off = True
+    if not palette_unsampleable and (doc_meta.get("palette_unsampleable") or doc_meta.get("images_unextractable")):
+        palette_unsampleable = True
+    if contrast_ratio is None and doc_meta.get("contrast_ratio") is not None:
+        contrast_ratio = doc_meta.get("contrast_ratio")
 
     validated_findings = run_deterministic_review(
         body_text=draft.get("body_text", ""),
@@ -1015,6 +1033,7 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
         palette_off=palette_off,
         contrast_ratio=contrast_ratio,
         pages=cached_pages,
+        palette_unsampleable=palette_unsampleable,
     )
 
     current_version = draft.get("current_version", 1)
@@ -1040,8 +1059,14 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
         insert_res = supabase.table("findings").insert(findings_to_insert).execute()
         saved_findings = insert_res.data or []
 
-    for f in saved_findings:
+    for idx, f in enumerate(saved_findings):
         f["brand_id"] = draft["brand_id"]
+        if idx < len(validated_findings) and "page" in validated_findings[idx]:
+            f["page"] = validated_findings[idx]["page"]
+        elif f.get("explanation", "").startswith("[Page "):
+            page_m = re.match(r"^\[Page\s+(\d+)\]", f.get("explanation", ""))
+            if page_m:
+                f["page"] = int(page_m.group(1))
 
     # Update draft status to "checked"
     supabase.table("drafts").update({
@@ -1165,7 +1190,7 @@ def attach_image(draft_id: str, payload: AttachImageRequest, request: Request = 
 
     return {"status": "image_attached", "id": actual_id, "draft_id": actual_id, "brand_id": draft["brand_id"], "image_url": payload.image_url, "version_no": current_ver}
 
-@app.get("/api/insights", summary="Real database session counts grouped by citation ID")
+@app.get("/api/insights", summary="Real database session counts grouped by citation ID (Insights v2)")
 def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID"), request: Request = None):
     auth_header = request.headers.get("Authorization") if request else None
     user = get_authenticated_user(auth_header)
@@ -1184,12 +1209,22 @@ def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID")
 
     supabase = get_supabase()
 
+    # Determine brand name
+    brand_name = "Demo Brand (Seeded)" if target_brand == DEMO_BRAND_ID else ("NovaTech Audio (Demo)" if target_brand == DEMO_BRAND_B_ID else "Brand")
+    if target_brand not in (DEMO_BRAND_ID, DEMO_BRAND_B_ID) and target_brand:
+        b_res = supabase.table("brands").select("name").eq("id", target_brand).execute()
+        if b_res.data and len(b_res.data) > 0:
+            brand_name = b_res.data[0].get("name", "Brand")
+
     # Query active vault items for target_brand to establish exact canonical citations for this brand
-    v_query = supabase.table("vault_items").select("item_id").eq("status", "active")
+    v_query = supabase.table("vault_items").select("item_id, title, kind, text").eq("status", "active")
     if target_brand:
         v_query = v_query.eq("brand_id", target_brand)
     vault_items_res = v_query.order("item_id").execute()
-    brand_citations = [item["item_id"] for item in (vault_items_res.data or [])]
+    vault_items_data = vault_items_res.data or []
+    vault_map = {item["item_id"]: item for item in vault_items_data}
+
+    brand_citations = [item["item_id"] for item in vault_items_data]
     if not brand_citations:
         if target_brand == DEMO_BRAND_ID:
             brand_citations = ["F-12", "R-04", "A-02", "R-09", "P-01", "P-02", "P-03", "P-04", "T-01", "T-02", "T-03", "T-04"]
@@ -1203,37 +1238,163 @@ def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID")
         "human_decision": 0
     }
 
-    query = supabase.table("findings").select("citation_id, lane")
+    # Fetch all drafts for target_brand ordered chronologically
+    drafts_query = supabase.table("drafts").select("id, title, status, created_at").order("created_at")
     if target_brand:
-        drafts_res = supabase.table("drafts").select("id").eq("brand_id", target_brand).execute()
-        draft_ids = [d["id"] for d in (drafts_res.data or [])]
-        if draft_ids:
-            query = query.in_("draft_id", draft_ids)
+        drafts_query = drafts_query.eq("brand_id", target_brand)
+    drafts_res = drafts_query.execute()
+    brand_drafts = drafts_res.data or []
+    draft_ids = [d["id"] for d in brand_drafts]
+
+    real_findings = []
+    drafts_findings_map = {d["id"]: [] for d in brand_drafts}
+
+    if draft_ids:
+        # Fetch findings for these drafts
+        findings_res = supabase.table("findings").select("id, draft_id, citation_id, lane, severity, explanation, created_at").in_("draft_id", draft_ids).execute()
+        real_findings = findings_res.data or []
+        for f in real_findings:
+            d_id = f.get("draft_id")
+            if d_id in drafts_findings_map:
+                drafts_findings_map[d_id].append(f)
+
+            cid = f.get("citation_id")
+            if cid:
+                counts_by_citation[cid] = counts_by_citation.get(cid, 0) + 1
+
+            lane = f.get("lane")
+            if lane:
+                counts_by_lane[lane] = counts_by_lane.get(lane, 0) + 1
+
+    # Dispositions per brand
+    dispositions = {
+        "clear_to_publish": 0,
+        "clear_with_edits": 0,
+        "hold_for_legal": 0
+    }
+    drafts_timeline = []
+    for d in brand_drafts:
+        d_f = drafts_findings_map.get(d["id"], [])
+        has_c = any(f.get("lane") == "contradiction" for f in d_f)
+        if len(d_f) == 0:
+            disp = "Clear to Publish"
+            dispositions["clear_to_publish"] += 1
+        elif has_c:
+            disp = "Hold for Legal"
+            dispositions["hold_for_legal"] += 1
         else:
-            return {
-                "brand_id": target_brand,
-                "total_findings": 0,
-                "counts_by_citation": counts_by_citation,
-                "counts_by_lane": counts_by_lane,
-            }
+            disp = "Clear with Edits"
+            dispositions["clear_with_edits"] += 1
 
-    findings_res = query.execute()
-    real_findings = findings_res.data or []
+        drafts_timeline.append({
+            "id": d["id"],
+            "title": d.get("title", "Untitled Draft"),
+            "created_at": d.get("created_at"),
+            "findings_count": len(d_f),
+            "disposition": disp,
+            "has_contradiction": has_c
+        })
 
-    for f in real_findings:
-        cid = f.get("citation_id")
-        if cid:
-            counts_by_citation[cid] = counts_by_citation.get(cid, 0) + 1
+    # Most-repeated citation
+    top_citation = None
+    sorted_citations = sorted(counts_by_citation.items(), key=lambda x: x[1], reverse=True)
+    if sorted_citations and sorted_citations[0][1] > 0:
+        top_cid, top_count = sorted_citations[0]
+        v_item = vault_map.get(top_cid, {})
+        top_citation = {
+            "citation_id": top_cid,
+            "count": top_count,
+            "title": v_item.get("title", f"Rule {top_cid}"),
+            "kind": v_item.get("kind", "rule")
+        }
 
-        lane = f.get("lane")
-        if lane:
-            counts_by_lane[lane] = counts_by_lane.get(lane, 0) + 1
+    # Most-repeated violation type (lane)
+    top_violation_type = None
+    sorted_lanes = sorted(counts_by_lane.items(), key=lambda x: x[1], reverse=True)
+    lane_labels = {
+        "contradiction": "Contradiction (Factual Mismatch)",
+        "evidence_needed": "Evidence Needed (Ungrounded Superlative)",
+        "human_decision": "Human Decision (Design & Policy)"
+    }
+    if sorted_lanes and sorted_lanes[0][1] > 0:
+        t_lane, t_lane_count = sorted_lanes[0]
+        top_violation_type = {
+            "lane": t_lane,
+            "label": lane_labels.get(t_lane, t_lane.replace("_", " ").title()),
+            "count": t_lane_count
+        }
+
+    # Trend by draft: is this guideline getting better or worse over drafts?
+    trend_status = "no_data"
+    trend_desc = "No drafts evaluated yet."
+    recent_count = 0
+    prior_count = 0
+
+    if len(brand_drafts) == 1:
+        trend_status = "stable"
+        f_cnt = len(drafts_findings_map[brand_drafts[0]["id"]])
+        trend_desc = f"Baseline established across 1 draft ({f_cnt} findings recorded)."
+        recent_count = f_cnt
+    elif len(brand_drafts) >= 2:
+        latest_draft = brand_drafts[-1]
+        prior_drafts = brand_drafts[:-1]
+        recent_count = len(drafts_findings_map[latest_draft["id"]])
+        prior_counts = [len(drafts_findings_map[d["id"]]) for d in prior_drafts]
+        prior_avg = sum(prior_counts) / len(prior_counts)
+        prior_count = int(prior_avg)
+
+        if recent_count < prior_avg:
+            trend_status = "improving"
+            trend_desc = f"Improving: {recent_count} findings in latest draft vs {prior_avg:.1f} avg in earlier drafts."
+        elif recent_count > prior_avg:
+            trend_status = "worsening"
+            trend_desc = f"Worsening: {recent_count} findings in latest draft vs {prior_avg:.1f} avg in earlier drafts."
+        else:
+            trend_status = "stable"
+            trend_desc = f"Stable: consistent {recent_count} findings across recent drafts."
+
+    # "Fix this guideline first" line for the top repeated issue
+    fix_first = "All guidelines in compliance. No repeat violations detected."
+    if top_citation:
+        cid = top_citation["citation_id"]
+        cnt = top_citation["count"]
+        if cid == "F-12":
+            fix_first = f"Fix guideline F-12 first: {cnt} promotional pricing contradictions recorded. Align all copy prices to approved Rs. 1,299."
+        elif cid == "R-04":
+            fix_first = f"Fix guideline R-04 first: {cnt} ungrounded superlative claims detected. Replace 'India's No. 1' with 'trusted' and 'clinically proven' with 'certified quality'."
+        elif cid == "F-20":
+            fix_first = f"Fix guideline F-20 first: {cnt} pricing discrepancies found (Rs. 3,499 vs approved Rs. 4,999). Align promotional pricing to approved fact."
+        elif cid == "R-15":
+            fix_first = f"Fix guideline R-15 first: {cnt} unverified battery or latency claims found. Use verified lab test benchmarks or replace with 'verified battery performance'."
+        elif cid == "R-09":
+            fix_first = f"Fix guideline R-09 first: {cnt} accessibility issues flagged. Add descriptive alt text or adjust visual text contrast to meet 4.5:1 AA standard."
+        elif cid in ("P-01", "P-10", "P-11"):
+            fix_first = f"Fix guideline {cid} first: {cnt} color palette deviations recorded. Restrict creative visual assets to approved brand hex codes."
+        else:
+            fix_first = f"Fix guideline {cid} first: {cnt} occurrences recorded across drafts. Review {top_citation['title']} to eliminate recurring flags."
+
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     return {
         "brand_id": target_brand,
+        "brand_name": brand_name,
+        "generated_at": now_iso,
+        "total_drafts": len(brand_drafts),
         "total_findings": len(real_findings),
         "counts_by_citation": counts_by_citation,
         "counts_by_lane": counts_by_lane,
+        "dispositions": dispositions,
+        "top_citation": top_citation,
+        "top_violation_type": top_violation_type,
+        "trend": {
+            "status": trend_status,
+            "description": trend_desc,
+            "recent_draft_findings": recent_count,
+            "prior_draft_findings": prior_count,
+        },
+        "fix_first": fix_first,
+        "drafts_timeline": drafts_timeline,
     }
 
 @app.post("/api/drafts/{draft_id}/apply-fix", summary="Apply suggested fix to draft text")

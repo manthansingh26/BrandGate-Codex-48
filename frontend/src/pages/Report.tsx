@@ -181,17 +181,36 @@ export const Report: React.FC<ReportProps> = ({
   const humanDecision = findings.filter((f) => f.lane === 'human_decision');
   const aiFindings = llmReview?.findings || [];
 
+  // Report disposition: Hold for Legal (if contradiction exists), Clear with Edits (if only evidence_needed / human_decision remain), Clear to Publish (if 0 findings)
+  const disposition: 'Clear to Publish' | 'Clear with Edits' | 'Hold for Legal' =
+    findings.length === 0
+      ? 'Clear to Publish'
+      : contradictions.length > 0
+      ? 'Hold for Legal'
+      : 'Clear with Edits';
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-6">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex flex-wrap items-center gap-2 mb-1.5">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-teal-500/20 text-teal-400 border border-teal-500/30">
               Version {draft.current_version}
             </span>
             <span className="text-xs text-zinc-500 uppercase tracking-widest font-semibold">
               Status: <span className="text-zinc-300 font-bold">{draft.status}</span>
+            </span>
+            <span
+              className={`px-3 py-0.5 rounded-full text-xs font-extrabold uppercase tracking-wider border ${
+                disposition === 'Clear to Publish'
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                  : disposition === 'Clear with Edits'
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                  : 'bg-red-500/15 text-red-300 border-red-500/30'
+              }`}
+            >
+              Disposition: {disposition}
             </span>
           </div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight">{draft.title}</h1>
@@ -204,6 +223,45 @@ export const Report: React.FC<ReportProps> = ({
           Proceed to Approval Workflow
           <ArrowRight className="h-4 w-4" />
         </button>
+      </div>
+
+      {/* Report Disposition Banner */}
+      <div
+        className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+          disposition === 'Clear to Publish'
+            ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-200'
+            : disposition === 'Clear with Edits'
+            ? 'bg-amber-950/20 border-amber-500/30 text-amber-200'
+            : 'bg-red-950/20 border-red-500/30 text-red-200'
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          {disposition === 'Clear to Publish' ? (
+            <ShieldCheck className="h-5 w-5 text-emerald-400 flex-shrink-0" />
+          ) : disposition === 'Clear with Edits' ? (
+            <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0" />
+          ) : (
+            <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0" />
+          )}
+          <div>
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-400 block font-mono">
+              Governance Gate Disposition
+            </span>
+            <h3 className="text-base font-extrabold text-white">{disposition}</h3>
+            <p className="text-xs text-zinc-300/80 mt-0.5">
+              {disposition === 'Clear to Publish'
+                ? 'Zero governance findings. Creative draft meets all active Brand Vault rules and is clear to publish.'
+                : disposition === 'Clear with Edits'
+                ? 'No factual contradictions detected. Only Evidence Needed and Human Decision items remain before approval.'
+                : 'Contradiction findings detected blocking approval. Legal and factual discrepancies must be resolved.'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 self-start sm:self-center font-mono text-xs">
+          <span className="px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-zinc-300 font-bold">
+            {findings.length} {findings.length === 1 ? 'Finding' : 'Findings'}
+          </span>
+        </div>
       </div>
 
       {error && (
@@ -513,9 +571,9 @@ interface FindingCardProps {
 
 const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applyingFixId, applyFixElapsed }) => {
   const isApplying = applyingFixId === finding.id;
-  const pageMatch = finding.explanation.match(/^\[Page\s+(\d+)\]/i);
+  const pageMatch = finding.explanation.match(/\[Page\s+(\d+)\]/i) || finding.explanation.match(/\bPage\s+(\d+)\b/i);
   const pageNumber = finding.page || (pageMatch ? parseInt(pageMatch[1], 10) : undefined);
-  const cleanExplanation = pageMatch ? finding.explanation.replace(/^\[Page\s+\d+\]\s*/i, '') : finding.explanation;
+  const cleanExplanation = finding.explanation.replace(/\[Page\s+\d+\]\s*/gi, '').trim();
 
   const severityColor = {
     high: 'text-red-400 bg-red-950/30 border-red-800/40',
@@ -531,7 +589,7 @@ const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applying
             {finding.citation_id}
           </span>
           {pageNumber && (
-            <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-teal-500/15 text-teal-200 border border-teal-500/30">
+            <span className="px-2.5 py-0.5 rounded-md text-[10px] font-mono font-black bg-teal-500/25 text-teal-200 border border-teal-500/50 shadow-sm shadow-teal-500/20">
               Page {pageNumber}
             </span>
           )}

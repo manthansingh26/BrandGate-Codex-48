@@ -103,6 +103,7 @@ class ReviewDraftRequest(BaseModel):
     logo_confirmed: bool = Field(False, description="Reviewer confirmed current logo (A-02)")
     palette_off: bool = Field(False, description="Client-side canvas sampling detected off-palette colors")
     contrast_ratio: Optional[float] = Field(None, description="Calculated WCAG text contrast ratio")
+    palette_unsampleable: bool = Field(False, description="Image palette could not be sampled")
 
 class BrandCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Brand workspace name")

@@ -3,7 +3,7 @@ import { Draft, Finding, ApiConnectionStatus, Brand } from '../types';
 import { api } from '../api/client';
 import { supabase } from '../supabase';
 import { runLocalDemoReview } from '../utils/localReviewEngine';
-import { sampleImageColors, calculateContrastRatio, ContrastResult } from '../utils/imageAnalysis';
+import { sampleImageColors, calculateContrastRatio, calculateSampledColorsContrast, ContrastResult } from '../utils/imageAnalysis';
 import { BrandSwitcher } from '../components/BrandSwitcher';
 import { ShieldCheck, AlertCircle, RefreshCw, CheckCircle2, Image as ImageIcon, Eye, FileText, Upload, Info, AlertTriangle } from 'lucide-react';
 
@@ -53,6 +53,8 @@ export const Submit: React.FC<SubmitProps> = ({
   const [sampledColors, setSampledColors] = useState<string[]>([]);
   const [isOffPalette, setIsOffPalette] = useState(false);
   const [contrastResult, setContrastResult] = useState<ContrastResult | null>(null);
+  const [sampledContrastResult, setSampledContrastResult] = useState<ContrastResult | null>(null);
+  const [paletteUnsampleable, setPaletteUnsampleable] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +76,8 @@ export const Submit: React.FC<SubmitProps> = ({
     setSampledColors([]);
     setIsOffPalette(false);
     setContrastResult(null);
+    setSampledContrastResult(null);
+    setPaletteUnsampleable(false);
     setError(null);
     setDocFile(null);
     setDocParsing(false);
@@ -134,14 +138,26 @@ export const Submit: React.FC<SubmitProps> = ({
         if (parseResult.images && parseResult.images.length > 0) {
           const firstImg = parseResult.images[0];
           setImagePreview(firstImg.data_url);
-          setSampledColors(firstImg.sampled_colors || []);
+          const colors = firstImg.sampled_colors || [];
+          setSampledColors(colors);
           setIsOffPalette(Boolean(firstImg.is_off_palette));
+          if (colors.length >= 2) {
+            setSampledContrastResult(calculateSampledColorsContrast(colors));
+          } else {
+            setSampledContrastResult(null);
+          }
+          if (colors.length === 0) {
+            setPaletteUnsampleable(true);
+          } else {
+            setPaletteUnsampleable(false);
+          }
         }
 
         // Handle unextractable images: honest notice, never a fake pass
         if (parseResult.images_unextractable) {
+          setPaletteUnsampleable(true);
           setUnextractableImageNotice(
-            parseResult.unextractable_reason || 'Image could not be extracted — check manually'
+            parseResult.unextractable_reason || 'Could not sample — human decision'
           );
         }
       } else {
@@ -180,8 +196,17 @@ export const Submit: React.FC<SubmitProps> = ({
 
       // 2. Perform client-side canvas palette extraction (Approximate)
       const paletteAnalysis = await sampleImageColors(localUrl);
-      setSampledColors(paletteAnalysis.sampledColors);
-      setIsOffPalette(paletteAnalysis.isOffPalette);
+      if (paletteAnalysis.status === 'unavailable' || paletteAnalysis.sampledColors.length === 0) {
+        setPaletteUnsampleable(true);
+        setSampledColors([]);
+        setIsOffPalette(false);
+        setSampledContrastResult(null);
+      } else {
+        setPaletteUnsampleable(false);
+        setSampledColors(paletteAnalysis.sampledColors);
+        setIsOffPalette(paletteAnalysis.isOffPalette);
+        setSampledContrastResult(calculateSampledColorsContrast(paletteAnalysis.sampledColors));
+      }
 
       // 3. If Supabase client is configured, upload to public bucket "brandgate-creatives"
       if (supabase) {
@@ -273,10 +298,12 @@ export const Submit: React.FC<SubmitProps> = ({
         }
 
         // Run server-side review with image checks wired (Blocker 3)
+        const activeContrast = sampledContrastResult ? sampledContrastResult.ratio : (contrastResult ? contrastResult.ratio : undefined);
         const reviewRes = await api.reviewDraft(draftId, {
           logo_confirmed: logoConfirmed,
           palette_off: isOffPalette,
-          contrast_ratio: contrastResult ? contrastResult.ratio : undefined,
+          contrast_ratio: activeContrast,
+          palette_unsampleable: paletteUnsampleable,
         });
         const updatedDraft = await api.getDraft(draftId);
         onReviewCompleted(updatedDraft, reviewRes.findings, reviewRes.llm_review);
@@ -579,9 +606,22 @@ export const Submit: React.FC<SubmitProps> = ({
               </div>
             </div>
 
+            {/* Unsampleable Palette Notice */}
+            {paletteUnsampleable && (
+              <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/60 text-xs text-amber-300 flex items-start gap-2.5">
+                <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-amber-200 block">Could not sample — human decision</span>
+                  <p className="text-[11px] text-amber-400/80 mt-0.5">
+                    Image color palette could not be automatically extracted. Reviewer manual verification required against approved brand palette.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Extracted Color Palette Preview */}
             {sampledColors.length > 0 && (
-              <div className="p-3.5 rounded-xl bg-black/40 border border-zinc-800 space-y-2">
+              <div className="p-3.5 rounded-xl bg-black/40 border border-zinc-800 space-y-2.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-semibold text-zinc-300">Dominant Sampled Colors</span>
                   <span className="text-[10px] text-zinc-500 font-mono">Label: Approximate</span>
@@ -594,10 +634,27 @@ export const Submit: React.FC<SubmitProps> = ({
                     </div>
                   ))}
                 </div>
+
+                {/* Sampled Contrast Check showing AA 4.5:1 threshold */}
+                {sampledContrastResult && (
+                  <div className="pt-2 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-1 text-xs font-mono">
+                    <span className="text-zinc-400">Sampled Contrast:</span>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        sampledContrastResult.passesAA
+                          ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800'
+                          : 'bg-red-950/80 text-red-400 border border-red-800'
+                      }`}
+                    >
+                      {sampledContrastResult.ratioString} ({sampledContrastResult.passesAA ? 'Passes AA' : 'Fails AA'}) • Threshold: 4.5:1
+                    </span>
+                  </div>
+                )}
+
                 {isOffPalette && (
                   <p className="text-[11px] text-amber-400 flex items-center gap-1 font-medium pt-1">
-                    <AlertCircle className="h-3 w-3" />
-                    Palette sampling is approximate — reviewer confirmation recommended.
+                    <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                    Palette sampling is approximate — Human Decision required (Rule {isBrandB ? 'P-10' : 'P-01'}). Never an automatic contradiction.
                   </p>
                 )}
               </div>

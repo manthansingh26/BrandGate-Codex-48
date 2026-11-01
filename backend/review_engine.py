@@ -47,10 +47,25 @@ def _tag_page(finding: Dict[str, Any], target_term: Optional[str], pages: Option
     matched_page = None
     if target_term:
         term_clean = target_term.strip().lower()
+        term_norm = re.sub(r"['’`]", "", term_clean)
+        # 1. Exact or normalized search across page texts
         for p in pages:
-            if term_clean in p.get("text", "").lower():
+            p_text = p.get("text", "").lower()
+            p_norm = re.sub(r"['’`]", "", p_text)
+            if term_clean in p_text or term_norm in p_norm:
                 matched_page = p.get("page_number", 1)
                 break
+        # 2. Number or phrase regex fallback if not matched
+        if matched_page is None:
+            num_match = re.search(r'\d[\d,]*', term_clean)
+            if num_match:
+                raw_num = num_match.group(0).replace(",", "")
+                for p in pages:
+                    p_text = p.get("text", "").replace(",", "")
+                    if raw_num in p_text:
+                        matched_page = p.get("page_number", 1)
+                        break
+
     if matched_page is None:
         matched_page = pages[0].get("page_number", 1) if pages else 1
 
@@ -67,7 +82,8 @@ def run_deterministic_review(
     logo_confirmed: bool = False,
     palette_off: bool = False,
     contrast_ratio: Optional[float] = None,
-    pages: Optional[List[Dict[str, Any]]] = None
+    pages: Optional[List[Dict[str, Any]]] = None,
+    palette_unsampleable: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Executes deterministic brand governance checks:
@@ -266,6 +282,18 @@ def run_deterministic_review(
         }
         raw_findings.append(_tag_page(finding, None, pages))
 
+    # 7b. Unsampleable Palette Check (Never a fake pass, always human decision)
+    if palette_unsampleable and (palettes or image_url):
+        p_item = palettes[0] if palettes else {"item_id": "P-01"}
+        finding = {
+            "lane": "human_decision",
+            "severity": "low",
+            "citation_id": p_item.get("item_id", "P-01"),
+            "explanation": "Could not sample — human decision: Image color palette could not be automatically extracted. Reviewer manual verification required against approved brand palette.",
+            "suggested_fix": None
+        }
+        raw_findings.append(_tag_page(finding, None, pages))
+
     # --------------------------------------------------------------------------
     # 8. Visual Contrast Ratio Check (Cited R-09) (Blocker 3)
     # --------------------------------------------------------------------------
@@ -276,7 +304,7 @@ def run_deterministic_review(
                 "lane": "human_decision",
                 "severity": "medium",
                 "citation_id": "R-09",
-                "explanation": f"Visual text-to-background contrast ratio ({contrast_ratio}:1) fails WCAG AA standard (4.5:1 minimum). Review creative background against text color under accessibility rule R-09.",
+                "explanation": f"Visual text-to-background contrast ratio ({contrast_ratio:.1f}:1) fails WCAG AA standard (4.5:1 minimum threshold). Review creative background against text color under accessibility rule R-09.",
                 "suggested_fix": None
             }
             raw_findings.append(_tag_page(finding, None, pages))

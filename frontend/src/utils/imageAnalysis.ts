@@ -155,3 +155,19 @@ export function calculateContrastRatio(textColorHex: string, bgColorHex: string)
     passesAA: roundedRatio >= 4.5,
   };
 }
+
+export function calculateSampledColorsContrast(colors: string[]): ContrastResult | null {
+  if (!colors || colors.length < 2) return null;
+  const luminances = colors.map((hex) => {
+    try {
+      const rgb = hexToRgb(hex);
+      return { hex, lum: getRelativeLuminance(rgb.r, rgb.g, rgb.b) };
+    } catch {
+      return { hex, lum: 0.5 };
+    }
+  });
+  luminances.sort((a, b) => a.lum - b.lum);
+  const darkest = luminances[0];
+  const lightest = luminances[luminances.length - 1];
+  return calculateContrastRatio(lightest.hex, darkest.hex);
+}

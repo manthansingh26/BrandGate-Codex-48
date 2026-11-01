@@ -2,7 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { Brand, InsightsData, VaultItem } from '../types';
 import { api } from '../api/client';
 import { BrandSwitcher } from '../components/BrandSwitcher';
-import { BarChart3, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
+import {
+  BarChart3,
+  RefreshCw,
+  AlertCircle,
+  Loader2,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  ShieldCheck,
+  AlertTriangle,
+  CheckCircle2,
+  Lightbulb,
+  Calendar,
+} from 'lucide-react';
 
 interface InsightsProps {
   activeBrand: Brand | null;
@@ -21,10 +34,12 @@ export const Insights: React.FC<InsightsProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const fetchInsights = async () => {
+    // Immediately clear state on fetch to prevent any cross-brand data bleeding
     setData(null);
     setVaultMap({});
     setLoading(true);
     setError(null);
+
     try {
       const brandId = activeBrand?.id || '00000000-0000-0000-0000-000000000001';
       const [result, vaultData] = await Promise.all([
@@ -56,7 +71,7 @@ export const Insights: React.FC<InsightsProps> = ({
     fetchInsights();
   }, [activeBrand?.id]);
 
-  // Dynamically derive citation list from active brand's actual vault items and database session counts
+  // Derive citation list scoped strictly to active brand
   const citationKeys = Object.keys(data?.counts_by_citation || {});
   const fallbackKeys = Object.keys(vaultMap);
   const effectiveKeys = citationKeys.length > 0 ? citationKeys : fallbackKeys;
@@ -80,18 +95,24 @@ export const Insights: React.FC<InsightsProps> = ({
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-900 border border-zinc-800 text-teal-400">
-              Database aggregation
+              Insights v2 Aggregation
             </span>
             <span className="text-xs text-zinc-500 font-mono">
-              Live from PostgreSQL database
+              PostgreSQL • Brand-Scoped
             </span>
+            {data?.generated_at && (
+              <span className="text-[11px] text-zinc-500 font-mono flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
+                {data.generated_at}
+              </span>
+            )}
           </div>
           <h1 className="text-3xl font-extrabold text-white flex items-center gap-3">
             <BarChart3 className="h-8 w-8 text-teal-400" />
-            Governance Insights
+            Governance Insights v2
           </h1>
           <p className="text-sm text-zinc-400 mt-1">
-            Real aggregated finding counts across all drafts and reviews for{' '}
+            Aggregated findings, repeat violations, trends, and dispositions for{' '}
             <span className="text-white font-medium">{activeBrand?.name || 'Demo Brand (Seeded)'}</span>.
           </p>
         </div>
@@ -112,88 +133,251 @@ export const Insights: React.FC<InsightsProps> = ({
             className="btn-secondary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700 text-xs font-semibold disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            {loading ? 'Loading...' : 'Refresh Counts'}
+            {loading ? 'Loading...' : 'Refresh Insights'}
           </button>
         </div>
       </div>
 
-      {/* Honesty Disclosure Banner */}
-      <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-850 text-xs text-zinc-400 leading-relaxed">
-        <span className="font-semibold text-zinc-300">Honesty Label:</span> These metrics reflect actual rows recorded in the database. BrandGate never invents fictitious history, fake weekly trend graphs, or simulated user activity.
-      </div>
-
       {error && (
         <div className="p-4 rounded-xl bg-red-950/40 border border-red-900 text-red-400 text-xs flex items-center gap-2">
-          <AlertCircle className="h-4 w-4" />
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Summary Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-white/[0.08]">
-          <span className="text-xs font-semibold text-zinc-400 block mb-1 uppercase tracking-wider">Total Findings</span>
-          {loading || !data ? (
-            <div className="h-9 flex items-center">
-              <span className="text-xs font-mono text-zinc-400 animate-pulse flex items-center gap-1.5">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-400" />
-                Loading counts...
-              </span>
-            </div>
-          ) : (
-            <span className="text-3xl font-black text-white font-mono">
-              {data.total_findings}
+      {/* "Fix this guideline first" Banner */}
+      <div className="p-5 rounded-2xl bg-gradient-to-r from-teal-950/40 via-zinc-900/60 to-black/60 border border-teal-500/30 flex items-start sm:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className="p-2.5 rounded-xl bg-teal-500/15 border border-teal-500/30 text-teal-300 flex-shrink-0">
+            <Lightbulb className="h-5 w-5" />
+          </div>
+          <div>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-teal-400 block mb-0.5">
+              Priority Compliance Directive • Fix First
             </span>
-          )}
-          <span className="text-[11px] text-zinc-500 mt-1 block">Across all draft reviews</span>
+            {loading || !data ? (
+              <div className="h-6 flex items-center">
+                <span className="text-xs font-mono text-zinc-400 animate-pulse flex items-center gap-1.5">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-400" />
+                  Calculating highest-impact guideline for {activeBrand?.name || 'brand'}...
+                </span>
+              </div>
+            ) : (
+              <p className="text-sm sm:text-base font-bold text-white font-sans leading-snug">
+                {data.fix_first || 'All guidelines in compliance. No repeat violations detected.'}
+              </p>
+            )}
+          </div>
         </div>
-        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-red-500/20">
-          <span className="text-xs font-semibold text-red-400 block mb-1 uppercase tracking-wider">Contradictions</span>
-          {loading || !data ? (
-            <div className="h-9 flex items-center">
-              <span className="text-xs font-mono text-red-400/70 animate-pulse flex items-center gap-1.5">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-red-400" />
-                Loading counts...
-              </span>
-            </div>
-          ) : (
-            <span className="text-3xl font-black text-red-400 font-mono">
-              {data.counts_by_lane['contradiction'] || 0}
+      </div>
+
+      {/* Top Cards Row: Most-Repeated Citation, Most-Repeated Lane, Trend by Draft, Total Drafts */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Most-Repeated Citation */}
+        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-white/[0.08] flex flex-col justify-between">
+          <div>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 block mb-1">
+              Top Repeated Citation
             </span>
-          )}
-          <span className="text-[11px] text-zinc-500 mt-1 block">Factual discrepancies</span>
+            {loading || !data ? (
+              <div className="h-12 flex items-center">
+                <Loader2 className="h-4 w-4 animate-spin text-teal-400" />
+              </div>
+            ) : data.top_citation ? (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-md text-xs font-mono font-bold bg-teal-500/15 text-teal-300 border border-teal-500/30">
+                    {data.top_citation.citation_id}
+                  </span>
+                  <span className="text-2xl font-black text-white font-mono">
+                    {data.top_citation.count}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-300 font-medium line-clamp-2">
+                  {data.top_citation.title}
+                </p>
+              </div>
+            ) : (
+              <div className="text-zinc-500 text-xs font-mono">No repeat violations</div>
+            )}
+          </div>
+          <span className="text-[11px] text-zinc-500 mt-3 pt-2 border-t border-zinc-800/80 block">
+            Most frequent rule trigger
+          </span>
         </div>
-        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-amber-500/20">
-          <span className="text-xs font-semibold text-amber-400 block mb-1 uppercase tracking-wider">Evidence Needed</span>
-          {loading || !data ? (
-            <div className="h-9 flex items-center">
-              <span className="text-xs font-mono text-amber-400/70 animate-pulse flex items-center gap-1.5">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-400" />
-                Loading counts...
-              </span>
-            </div>
-          ) : (
-            <span className="text-3xl font-black text-amber-400 font-mono">
-              {data.counts_by_lane['evidence_needed'] || 0}
+
+        {/* Most-Repeated Violation Type */}
+        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-white/[0.08] flex flex-col justify-between">
+          <div>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 block mb-1">
+              Top Violation Type
             </span>
-          )}
-          <span className="text-[11px] text-zinc-500 mt-1 block">Unsubstantiated claims</span>
+            {loading || !data ? (
+              <div className="h-12 flex items-center">
+                <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+              </div>
+            ) : data.top_violation_type ? (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`px-2.5 py-0.5 rounded-md text-xs font-mono font-bold border ${
+                      data.top_violation_type.lane === 'contradiction'
+                        ? 'bg-red-500/15 text-red-300 border-red-500/30'
+                        : data.top_violation_type.lane === 'evidence_needed'
+                        ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                        : 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                    }`}
+                  >
+                    {data.top_violation_type.lane.toUpperCase()}
+                  </span>
+                  <span className="text-2xl font-black text-white font-mono">
+                    {data.top_violation_type.count}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-300 font-medium">
+                  {data.top_violation_type.label}
+                </p>
+              </div>
+            ) : (
+              <div className="text-zinc-500 text-xs font-mono">No violation lanes recorded</div>
+            )}
+          </div>
+          <span className="text-[11px] text-zinc-500 mt-3 pt-2 border-t border-zinc-800/80 block">
+            Dominant governance lane
+          </span>
         </div>
-        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-sky-500/20">
-          <span className="text-xs font-semibold text-sky-400 block mb-1 uppercase tracking-wider">Human Decision</span>
-          {loading || !data ? (
-            <div className="h-9 flex items-center">
-              <span className="text-xs font-mono text-sky-400/70 animate-pulse flex items-center gap-1.5">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" />
-                Loading counts...
-              </span>
-            </div>
-          ) : (
-            <span className="text-3xl font-black text-sky-400 font-mono">
-              {data.counts_by_lane['human_decision'] || 0}
+
+        {/* Trend by Draft */}
+        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-white/[0.08] flex flex-col justify-between">
+          <div>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 block mb-1">
+              Trend by Draft
             </span>
-          )}
-          <span className="text-[11px] text-zinc-500 mt-1 block">Logos, palettes & tone</span>
+            {loading || !data ? (
+              <div className="h-12 flex items-center">
+                <Loader2 className="h-4 w-4 animate-spin text-teal-400" />
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  {data.trend?.status === 'improving' ? (
+                    <span className="px-2.5 py-0.5 rounded-md text-xs font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                      <TrendingDown className="h-3.5 w-3.5" />
+                      Improving
+                    </span>
+                  ) : data.trend?.status === 'worsening' ? (
+                    <span className="px-2.5 py-0.5 rounded-md text-xs font-bold uppercase tracking-wider bg-red-500/15 text-red-300 border border-red-500/30 flex items-center gap-1">
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      Worsening
+                    </span>
+                  ) : data.trend?.status === 'stable' ? (
+                    <span className="px-2.5 py-0.5 rounded-md text-xs font-bold uppercase tracking-wider bg-teal-500/15 text-teal-300 border border-teal-500/30 flex items-center gap-1">
+                      <Minus className="h-3.5 w-3.5" />
+                      Stable
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-md text-xs font-bold uppercase tracking-wider bg-zinc-800 text-zinc-400 border border-zinc-700">
+                      Baseline
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-zinc-300 font-sans leading-tight mt-1">
+                  {data.trend?.description || 'Evaluating drafts trend...'}
+                </p>
+              </div>
+            )}
+          </div>
+          <span className="text-[11px] text-zinc-500 mt-3 pt-2 border-t border-zinc-800/80 block">
+            Latest vs historical draft findings
+          </span>
+        </div>
+
+        {/* Total Drafts & Findings */}
+        <div className="glass-card feature-card-micro p-5 rounded-2xl border border-white/[0.08] flex flex-col justify-between">
+          <div>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 block mb-1">
+              Drafts Evaluated
+            </span>
+            {loading || !data ? (
+              <div className="h-12 flex items-center">
+                <Loader2 className="h-4 w-4 animate-spin text-teal-400" />
+              </div>
+            ) : (
+              <div className="flex items-baseline gap-3">
+                <span className="text-3xl font-black text-white font-mono">
+                  {data.total_drafts || 0}
+                </span>
+                <span className="text-xs font-mono text-zinc-400">
+                  ({data.total_findings} total flags)
+                </span>
+              </div>
+            )}
+          </div>
+          <span className="text-[11px] text-zinc-500 mt-3 pt-2 border-t border-zinc-800/80 block">
+            PostgreSQL recorded drafts
+          </span>
+        </div>
+      </div>
+
+      {/* Dispositions Breakdown Section */}
+      <div className="glass-card p-6 sm:p-7 rounded-2xl border border-white/[0.08] space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+          <div>
+            <h3 className="text-base font-bold text-white tracking-tight">
+              Report Dispositions Summary (Per Brand)
+            </h3>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Real count of drafts categorized by governance outcome for {activeBrand?.name || 'brand'}.
+            </p>
+          </div>
+          <span className="text-xs text-teal-400 font-mono font-semibold">Real PostgreSQL aggregation</span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-4 rounded-xl bg-black/40 border border-emerald-500/20 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-emerald-300 block">Clear to Publish</span>
+                <span className="text-[11px] text-zinc-500">0 open findings</span>
+              </div>
+            </div>
+            <span className="text-2xl font-black text-white font-mono">
+              {loading || !data ? '—' : data.dispositions?.clear_to_publish ?? 0}
+            </span>
+          </div>
+
+          <div className="p-4 rounded-xl bg-black/40 border border-amber-500/20 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-amber-300 block">Clear with Edits</span>
+                <span className="text-[11px] text-zinc-500">Evidence / Decision only</span>
+              </div>
+            </div>
+            <span className="text-2xl font-black text-white font-mono">
+              {loading || !data ? '—' : data.dispositions?.clear_with_edits ?? 0}
+            </span>
+          </div>
+
+          <div className="p-4 rounded-xl bg-black/40 border border-red-500/20 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-red-300 block">Hold for Legal</span>
+                <span className="text-[11px] text-zinc-500">Contradictions block approval</span>
+              </div>
+            </div>
+            <span className="text-2xl font-black text-white font-mono">
+              {loading || !data ? '—' : data.dispositions?.hold_for_legal ?? 0}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -201,10 +385,14 @@ export const Insights: React.FC<InsightsProps> = ({
       <div className="glass-card p-6 sm:p-7 rounded-2xl border border-white/[0.08] space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
           <div>
-            <h3 className="text-base font-bold text-white tracking-tight">Findings Distribution by Vault Citation ID (Across all draft reviews)</h3>
-            <p className="text-xs text-zinc-400 mt-0.5">Frequency of governance findings flagged against ground-truth rules.</p>
+            <h3 className="text-base font-bold text-white tracking-tight">
+              Findings Distribution by Citation ID
+            </h3>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Exact occurrence counts scoped to {activeBrand?.name || 'brand'} rules.
+            </p>
           </div>
-          <span className="text-xs text-teal-400 font-mono font-semibold">Real PostgreSQL aggregation</span>
+          <span className="text-xs text-teal-400 font-mono font-semibold">PostgreSQL Session Counts</span>
         </div>
 
         <div className="space-y-3">
@@ -220,7 +408,10 @@ export const Insights: React.FC<InsightsProps> = ({
               const percent = count !== null ? Math.round((count / maxVal) * 100) : 0;
 
               return (
-                <div key={item.id} className="row-hover-micro p-3.5 rounded-xl bg-black/40 border border-zinc-850 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div
+                  key={item.id}
+                  className="row-hover-micro p-3.5 rounded-xl bg-black/40 border border-zinc-850 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                >
                   <div className="flex items-center gap-3 min-w-[280px]">
                     <span className="px-2.5 py-0.5 rounded-md font-mono font-bold bg-teal-500/10 border border-teal-500/20 text-teal-300">
                       {item.id}
@@ -244,7 +435,9 @@ export const Insights: React.FC<InsightsProps> = ({
 
                   <span
                     className={`font-mono font-bold px-3 py-1 rounded-full text-xs text-right whitespace-nowrap ${
-                      count !== null && count > 0 ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30' : 'text-zinc-600 bg-zinc-900/60'
+                      count !== null && count > 0
+                        ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
+                        : 'text-zinc-600 bg-zinc-900/60'
                     }`}
                   >
                     {count !== null ? `${count} ${count === 1 ? 'occurrence' : 'occurrences'}` : '—'}
@@ -254,6 +447,55 @@ export const Insights: React.FC<InsightsProps> = ({
             })
           )}
         </div>
+      </div>
+
+      {/* Chronological Drafts History Timeline */}
+      {data?.drafts_timeline && data.drafts_timeline.length > 0 && (
+        <div className="glass-card p-6 sm:p-7 rounded-2xl border border-white/[0.08] space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3">
+            <div>
+              <h3 className="text-base font-bold text-white tracking-tight">
+                Chronological Drafts Timeline & Outcomes
+              </h3>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Evaluation history tracking governance resolution progression.
+              </p>
+            </div>
+            <span className="text-xs text-zinc-500 font-mono">{data.drafts_timeline.length} recorded</span>
+          </div>
+
+          <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+            {data.drafts_timeline.slice().reverse().map((d) => (
+              <div
+                key={d.id}
+                className="p-3 rounded-xl bg-black/40 border border-zinc-850 flex flex-wrap items-center justify-between gap-3 text-xs"
+              >
+                <div className="space-y-0.5">
+                  <div className="font-semibold text-zinc-200">{d.title}</div>
+                  <div className="text-[11px] text-zinc-500 font-mono">
+                    {d.created_at ? new Date(d.created_at).toLocaleString() : 'Recent Draft'} • {d.findings_count} findings
+                  </div>
+                </div>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wider border ${
+                    d.disposition === 'Clear to Publish'
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      : d.disposition === 'Clear with Edits'
+                      ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                      : 'bg-red-500/15 text-red-300 border-red-500/30'
+                  }`}
+                >
+                  {d.disposition}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Honesty Disclosure Banner */}
+      <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-850 text-xs text-zinc-400 leading-relaxed">
+        <span className="font-semibold text-zinc-300">Honesty Label:</span> These metrics reflect actual rows recorded in the PostgreSQL database for {activeBrand?.name || 'this brand'}. BrandGate never invents fictitious history, fake weekly trend graphs, or simulated user activity.
       </div>
     </div>
   );

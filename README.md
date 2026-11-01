@@ -66,10 +66,21 @@ The judge evaluation path requires **zero sign-in** and works out of the box in 
   * Enforces open-findings gate: Approve button is disabled while unresolved findings remain.
   * Enforces snapshot immutability: Any post-approval edit creates a new version and automatically resets status to `draft` server-side.
 * **Visual & Image Governance**:
-  * Color palette sampling is explicitly labeled **"Approximate"** and produces Human Decision findings.
+  * Color palette sampling is explicitly labeled **"Approximate"** and produces Human Decision findings (never Contradiction).
   * Logo verification (`A-02`) is strictly **reviewer-confirmed only** — automated CV logo detection is never claimed.
-  * WCAG 2.1 AA text contrast validation against creative backgrounds (4.5:1 threshold, 21:1 baseline).
-* **Live Database Insights**: Aggregated violation occurrences pulled directly from PostgreSQL without simulated metrics.
+  * Visual text-to-background contrast checking against WCAG AA standards with the explicit 4.5:1 threshold shown.
+  * Alt-text accessibility enforcement cited under `R-09` (Human Decision).
+  * Unextractable or unsampleable image assets flag `"Could not sample — human decision"` rather than a silent pass.
+* **Document Ingestion & Multi-Page Governance**:
+  * Upload `.docx` and `.pdf` creative assets directly up to 10MB.
+  * Findings on multi-page PDFs display their exact `Page {page_number}` badge directly on the finding card.
+  * Scanned PDFs without text layers surface honest OCR limitations without fictitious passes.
+* **Report Disposition**:
+  * Clear, deterministic disposition badge on creative reports: `Clear to Publish` (0 findings), `Clear with Edits` (evidence needed / human decision only), and `Hold for Legal` (factual contradictions block approval).
+* **Live Database Insights v2**:
+  * Aggregated real counts directly from PostgreSQL per brand (dated, zero static numbers).
+  * Brand-scoped most-repeated citation, dominant violation type, trend by draft (improving/worsening/stable), and plain-language `"Fix this guideline first"` directives.
+  * Complete brand isolation: switching brands updates all metrics with zero cross-brand leaks.
 * **Guest Demo Mode**: Full functionality available immediately with zero login wall; guest writes are restricted to the demo brand and recorded as `guest` / `demo_reviewer`. Real accounts use optional Supabase Auth.
 
 ---
