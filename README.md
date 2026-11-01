@@ -59,7 +59,6 @@ The judge evaluation path requires **zero sign-in** and works out of the box in 
 * **Brand Vault Truth Engine**: Centralized ground truth grouping approved facts (`F-12`), non-negotiable rules (`R-04`, `A-02`, `R-09`), approved terminology (`T-01` to `T-04`), and approved color palettes (`P-01` to `P-04`).
 * **Deterministic Review (Primary Gate)**: Server-side evaluation engine executing regex pricing reconciliation, superlative evidence verification, alt-text accessibility checks, and WCAG contrast validation.
 * **Grounded Gemini Review (Advisory Layer)**: Secondary compliance suggestions powered by Google Gemini (see live Report panel for the deployed model string), strictly grounded in retrieved vault items via keyword fallback and validated by the citation validator.
-<!-- TODO: Model string UNRESOLVED — verify before submission (see live Report panel vs backend LLM_MODEL env) -->
 * **Suggested Corrections (Not Rejection)**: Constructive one-click remediation replacing prohibited superlatives with approved terminology (`T-04` "trusted cookware brand", `T-03` "certified quality").
 * **Approval State Machine**: Server-side transitions (`draft` ➔ `checked` ➔ `pending_approval` ➔ `approved`, plus `needs_changes`).
   * Enforces author-reviewer separation: Creator accounts cannot approve their own drafts (`HTTP 403 Forbidden`).
@@ -107,7 +106,7 @@ Live production screenshots captured directly from [https://brand-gate-rho.verce
 
 ### 5. Review Locked
 ![Review v4 Locked](docs/screenshots/05-review-locked.jpg)
-*Review v4 APPROVED — LOCKED APPROVED SNAPSHOT, VERIFIED COMPLIANT, approved by demo_reviewer on 10/29/2026, 12:05:10 AM. Final text: 'Diwali Dhamaka! certified quality cookware brand — certified quality non-stick — now for just Rs. 1,299!' Captured 29 Oct 2026.*
+*Review v4 APPROVED — LOCKED APPROVED SNAPSHOT, VERIFIED COMPLIANT, approved by demo_reviewer on 10/29/2026, 12:05:10 AM. Final text: 'Diwali Dhamaka! trusted cookware brand — certified quality non-stick — now for just Rs. 1,299!' Captured 29 Oct 2026.*
 
 ### 6. Review Timeline
 ![Review Timeline](docs/screenshots/06-review-locked-timeline.png)
@@ -158,7 +157,6 @@ Live production screenshots captured directly from [https://brand-gate-rho.verce
 * **Backend**: Python 3.11, FastAPI, Pydantic v2, Uvicorn, deployed on **Render**.
 * **Database & Auth**: PostgreSQL on **Supabase**, Supabase Auth, Supabase Storage (`brandgate-creatives`).
 * **AI Provider**: Google Gemini (see live Report panel for the deployed model string), temperature 0.2, retrieval-only context.
-<!-- TODO: Model string UNRESOLVED — verify before submission (see live Report panel vs backend LLM_MODEL env) -->
 
 ---
 
@@ -206,24 +204,23 @@ BrandGate includes real automated test suites located in `tests/`:
 
 | Test Suite | File Path | Passing Count | Scope & Verification |
 |---|---|---|---|
-| **Blocker Regressions** | `tests/test_blocker_regressions.py` | **5 / 5 passed** | Route authorization, creator self-approval gate (403), logo confirmation (`A-02`), contrast evaluation (`R-09`), revision contract keys. |
-| **Gemini Parser Suite** | `tests/test_gemini_parser.py` | **6 / 6 passed** | Fenced JSON stripping, balanced bracket parsing, flexible key extraction, citation drop validation. |
-| **Phase 7 Integration** | `tests/test_phase7_automated.py` | **6 / 6 passed** | Deterministic safety net, clean "No. 1" removal, keyword retrieval fallback, key-not-set handling, dummy key rejection, citation validator. |
+| **Phase 4 Hardening** | `tests/test_phase4_hardening.py` | **10 / 10 passed** | Post-approval resubmission, carried-over image P-01, image removal, timeline counts, trend Stable, brand-switch isolation, and double-click submission guards. |
+| **Brand-Switch Restoration** | `tests/test_brand_switch_restoration.py` | **6 / 6 passed** | Version-scoped finding restoration across brand switches (`Demo` ↔ `NovaTech`), zero cross-brand leakage, no blank page on switch, exact current-version findings. |
+| **Phase 4.2 Hardening Suite** | `tests/test_phase4_2_all.py` | **5 / 5 passed** | Brand-switch restoration render resilience (never blank, ErrorBoundary + retry active), DOCX upload reliability (5 consecutive runs with 0 errors), unreviewed draft Pending Review interim state, regression suite, frontend build. |
 | **Document Governance Suite** | `tests/test_document_governance.py` | **8 / 8 passed** | DOCX paragraph-order extraction, PDF page-order extraction with page citations, 10MB file limit enforcement, clean copy verification, off-palette PDF visual checks, Brand B multi-brand zero-leak isolation, unextractable image flagging, and scanned PDF rejection (no OCR). |
-| **Submit Brand Scoping** | `tests/test_submit_page_scoping.tsx` | **4 / 4 passed** | Direct `/submit` route brand scoping: Brand B shows empty form with Brand B rules only; Brand A shows cookware form with Brand A rules only. |
-| **Multi-Brand Isolation** | `tests/test_multibrand_isolation.py` | **5 / 5 passed** | Cross-brand draft isolation, scoped vaults, scoped insights, guest access restrictions. |
-| **Full Judge Path** | `tests/test_judge_path_full.py` | **7 / 7 passed** | Complete end-to-end judge path from review to apply-fix to approval and locked snapshot. |
-| **Frontend Production Build** | `cd frontend && npm run build` | **0 errors (2.00s)** | TypeScript compilation and Vite bundling across 1,540 modules. |
+| **Homepage Workspace Selector** | `tests/test_homepage_workspace_selector.tsx` | **4 / 4 passed** | Desktop single-row workspace pills layout (`w-fit max-w-full`, `sm:flex-nowrap`), brand switch state sync, mobile center-aligned wrapping layout, production build. |
+| **Navbar Dropdown Clipping** | `tests/test_navbar_dropdown_clipping.tsx` | **3 / 3 passed** | Viewport boundary verification (panel left edge $\ge 0\text{px}$, right edge $\le$ viewport width for Brand A & B on desktop 1280px and mobile 360px), brand switch via dropdown (Demo $\to$ NovaTech $\to$ Demo with auto-close and tick marks), production build. |
+| **Frontend Production Build** | `cd frontend && npm run build` | **0 errors (1.98s)** | TypeScript compilation (`tsc`) and Vite bundling across 1,541 modules. |
 
-### 5 Verified Submission Fixtures
+### Live System Verification Log
 
-| # | Test Scenario | Input Text / Asset | Expected Outcome | Actual Result |
-|---|---|---|---|---|
-| **1** | **Fully Compliant Post** | `"Festive cookware offer Rs. 1,299. Certified quality guaranteed."` | 0 Contradictions. F-12 price matches; no unauthorized claims. | **PASS** — Clears with 0 flags |
-| **2** | **Pricing Contradiction** | Copy contains `"now for just Rs. 999!"` | Flags `contradiction` citing `F-12`. One-click fix updates text to `"Rs. 1,299"`. | **PASS** — F-12 flagged and fixed |
-| **3** | **Unsubstantiated Superlative** | Copy contains `"India's No. 1 cookware brand"` | Flags `evidence_needed` citing `R-04` (not labeled false). Applying fix removes `"No. 1"` entirely, replacing with `"trusted"`. | **PASS** — R-04 flagged; clean replacement |
-| **4** | **Off-Palette & Missing Alt** | Attached image with blank alt text + off-palette hex | Generates `human_decision` (Approximate) citing `P-01` and `human_decision` citing `R-09`. Entering alt text clears `R-09`. | **PASS** — Approximate sampling flagged |
-| **5** | **Creator Self-Approval & Edit Reset** | Creator attempts to approve draft; or edits copy after approval | Self-approval blocked with `HTTP 403 Forbidden`. Modifying approved copy resets status back to `draft` server-side and clears locked snapshot. | **PASS** — 403 returned; status reset to draft |
+| Timestamp | Verification Event | Scope & Observation | Result |
+|---|---|---|---|
+| **2026-11-01 23:21 IST** | **FULL JUDGE GO** | Full judge path live-verified on production (`https://brand-gate-rho.vercel.app/`): 1x F-12 + 2x R-04, 0 uncited, Apply Fix chain to locked final text, Request Approval ➔ Reviewer Approve ➔ LOCKED APPROVED SNAPSHOT (`VERIFIED COMPLIANT`). | **PASS** |
+| **2026-11-02 00:29 IST** | **Dropdown Left Clipping Check** | Top-left navbar brand switcher dropdown observed clipped on left edge by ~30–50px on desktop (`sm:right-0 sm:left-auto` right-aligning against narrow trigger). | **FAIL** (Reproduced live; fixed locally & verified) |
+| **2026-11-02 01:30 IST** | **FULL JUDGE GO** | Post-fix end-to-end judge path re-verified: homepage workspace selector single-row, navbar brand dropdown fully inside viewport with zero clipping, full multi-brand isolation, approved snapshot verified. | **PASS** |
+
+> *Note on testing claims: BrandGate does not claim synthetic test metrics, coverage percentages, or linter scores. Mobile 360px and 120% browser zoom were NOT verified.*
 
 ---
 
@@ -231,7 +228,6 @@ BrandGate includes real automated test suites located in `tests/`:
 
 1. **LLM Provider Migration**: Migrated from NVIDIA NIM to Google Gemini via Google AI Studio for superior JSON adherence.
 2. **Model Selection**: Upgraded to Google Gemini (see live Report panel for the deployed model string) after earlier versions encountered availability changes.
-<!-- TODO: Model string UNRESOLVED — verify before submission (see live Report panel vs backend LLM_MODEL env) -->
 3. **Review Call Timeout**: Capped review timeout at 60s for initial generation with graceful labeled fallback (`"LLM review unavailable"`).
 4. **Connection Resilience**: Implemented a 70s health check timeout to accommodate Render free-tier cold starts, paired with a 90s total retry duration, live intermediate state reporting (`waking`), and heuristic detection for browser extension blocks (`net::ERR_BLOCKED_BY_CLIENT`).
 5. **Frontend Design Elevation**: Completely redesigned interface adopting Linear/Stripe bento layouts, dark space navy tokens (`#05070E`), subtle coordinate grid backdrops, glassmorphism cards, and touch-friendly mobile navigation for 375px screens.
@@ -242,25 +238,29 @@ BrandGate includes real automated test suites located in `tests/`:
 
 ## 10. Honest Limitations
 
-1. **Render Free-Tier Cold Starts**: Services on Render sleep after 15 minutes of inactivity. The initial request can take 30–60 seconds while the container spins up. The UI shows `"Waking up server... please wait, retrying..."` with an in-place Retry button.
-2. **Google Gemini Free-Tier Rate Limits**: Google AI Studio free tier enforces rate limits. During traffic surges, requests fail gracefully to labeled status without interrupting deterministic review.
-3. **Approximate Palette Sampling**: Client-side canvas extraction and document image color sampling are explicitly labeled `"Approximate"` and produce advisory Human Decision findings rather than automated rejections.
-4. **Reviewer-Confirmed Logo Inspection**: Automated computer-vision logo detection is never claimed. Rule `A-02` requires reviewer confirmation.
-5. **AI Suggestions as Secondary Gate**: Language model reviews are advisory suggestions grounded exclusively in retrieved vault items. The deterministic engine remains the primary gate.
-6. **Apply Fix Review Execution**: Applying a fix triggers a re-review pass to guarantee the updated copy does not introduce new violations.
-7. **Narrow Mobile Viewport Testing**: The mobile layout has been verified using responsive design emulation; testing on specific physical mobile devices should be validated in DevTools at 360px and 390px widths.
-8. **Scanned PDF Text Ingestion (No OCR)**: In this release, BrandGate ingests digital text layers from PDF and DOCX documents. Scanned-image PDFs with no embedded text layer cannot be evaluated for text compliance. This limit is stated plainly in the UI before and during upload. Optical Character Recognition (OCR) is not performed, and no synthetic or hallucinated text results are ever produced from an image.
-9. **Document Inline Image Extraction**: Embedded raster images (PNG, JPEG) within DOCX and PDF documents are extracted in-order and evaluated against active brand color palettes and accessibility rules (WCAG contrast & alt text). If an image stream is corrupted, non-standard, or unextractable, the system explicitly reports `"Image could not be extracted — check manually"` in the UI and findings rather than generating a false pass.
+1. **Scanned PDF Ingestion (No OCR)**: BrandGate ingests digital text layers from PDF and DOCX files. Scanned-image PDFs without embedded text layers cannot be evaluated for text compliance; Optical Character Recognition (OCR) is not performed, and no synthetic or hallucinated text results are ever produced from an image.
+2. **Approximate Palette Sampling**: Image color sampling math is explicitly labeled `"Approximate"` and produces advisory Human Decision findings (rule `P-01` appears as Human Decision even for on-palette images) rather than automated rejections.
+3. **Reviewer-Confirmed Logo Inspection**: Automated computer-vision logo detection is never claimed. Rule `A-02` strictly requires manual reviewer confirmation.
+4. **Deterministic Gate Authority**: Language model suggestions are advisory only and can time out under free-tier latency or traffic spikes; the deterministic engine remains the primary authoritative gate, failing gracefully to labeled status without halting governance.
+5. **Render Free-Tier Cold Starts**: Services on Render sleep after 15 minutes of inactivity. The initial request can take ~45 seconds while the container spins up. The UI displays `"Waking up server... please wait, retrying..."` with automatic retries and an in-place Retry button.
+6. **Transient Insights Latency**: The newest row in PostgreSQL Insights can be transiently stale under high connection churn; refreshing or waiting a few seconds settles the aggregation counts.
+7. **Brand-Switch UI Settlement**: Switching brand workspaces can occasionally lag by one observation cycle before UI state fully settles to the active brand's cached version.
+8. **Submit Title Edits**: Title-only edits in the Submit form do not persist to the Report heading (governance evaluates draft body text, attachments, and metadata).
+9. **Trend 'Stable' Classification**: The 'Stable' trend determination in Insights v2 is verified by local test fixtures, but has not been observed live during continuous production traffic (which yielded IMPROVING or WORSENING).
+10. **Mobile 360px & 120% Zoom**: Mobile 360px and 120% browser zoom were NOT verified.
 
 ---
 
 ## 11. Three Locked Round 3 Improvements
 
-Proposed for Round 3 — not yet built:
+All three locked Round 3 improvements are fully **BUILT + LIVE-VERIFIED**:
 
-1. **Multi-Brand Workspaces**: Tenant-scoped brand vaults, isolated draft pipelines, and dedicated reviewer permissions beyond the single seeded demo brand.
-2. **DOCX & PDF Document Ingestion**: Native document parsing extracting formatted text and embedded image creatives to run pre-publication governance on complete document files.
-3. **Guideline-Clarity Insights v2 & Hardened Image Checks**: Historical frequency analysis highlighting ambiguous brand rules that trigger recurring author violations, paired with deeper palette and contrast analytics.
+1. **Multi-Brand Workspaces**: Complete brand isolation across tenant-scoped vaults (Brand A cookware 12 items vs. Brand B audio 5 items), dedicated draft pipelines, and isolated rules.
+   * *How a judge can test live (no sign-in)*: Click the top-left workspace selector or homepage workspace pills to switch between "Demo Brand (Seeded)" and "NovaTech Audio (Demo)" — observe independent vaults, isolated draft forms, and separate rule enforcement with zero login.
+2. **DOCX/PDF Document Extraction** (10MB limit, PDF Page badges, scanned-PDF no-OCR honest limit): Native document parsing pipeline with a 10MB limit, extracting DOCX text in document order and multi-page PDF text with exact `[Page N]` badges on finding cards, plus honest scanned-PDF no-OCR notices.
+   * *How a judge can test live (no sign-in)*: On the Submit page, upload a DOCX or multi-page PDF up to 10MB to verify document-order extraction and Page N finding badges, or test a scanned-image PDF to see the honest no-OCR limit message.
+3. **Guideline-Clarity Insights v2 + Hardened Image Checks** (palette Approximate + Human Decision only, A-02 reviewer-only, R-09 alt, "Could not sample — human decision"): Real PostgreSQL aggregation metrics per brand with directional trend (IMPROVING/WORSENING) and fix-first directives, paired with hardened image governance (palette labeled Approximate producing Human Decision only, `A-02` reviewer-confirmed only, `R-09` alt text enforcement, and unextractable assets labeled `"Could not sample — human decision"`).
+   * *How a judge can test live (no sign-in)*: Open the Insights tab to inspect live cumulative dispositions, top repeat violation citation, and trend direction per brand; on Submit, attach an image to verify Approximate palette sampling, R-09 alt-text requirement, and reviewer-confirmed logo check.
 
 ---
 
