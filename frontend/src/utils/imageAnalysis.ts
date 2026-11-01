@@ -29,7 +29,10 @@ export const APPROVED_BRAND_PALETTE = [
  * Labels: "Approximate" — never claims pixel-perfect detection.
  * On CORS or load errors, marks status as 'unavailable' rather than claiming pass.
  */
-export async function sampleImageColors(imageUrl: string): Promise<PaletteAnalysisResult> {
+export async function sampleImageColors(
+  imageUrl: string,
+  approvedPalette: string[] = APPROVED_BRAND_PALETTE
+): Promise<PaletteAnalysisResult> {
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'Anonymous';
@@ -59,21 +62,30 @@ export async function sampleImageColors(imageUrl: string): Promise<PaletteAnalys
 
         // Sample pixels with a step of 16 (RGBA quad)
         for (let i = 0; i < imageData.length; i += 16) {
-          const r = Math.round(imageData[i] / 32) * 32;
-          const g = Math.round(imageData[i + 1] / 32) * 32;
-          const b = Math.round(imageData[i + 2] / 32) * 32;
-          const hex = `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase()}`;
+          const a = imageData[i + 3];
+          if (a < 128) continue; // Skip transparent pixels
+
+          // Clamp quantized channels to 0..255 to prevent overflow past 8 bits
+          const r = Math.min(255, Math.max(0, Math.round(imageData[i] / 32) * 32));
+          const g = Math.min(255, Math.max(0, Math.round(imageData[i + 1] / 32) * 32));
+          const b = Math.min(255, Math.max(0, Math.round(imageData[i + 2] / 32) * 32));
+          const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase();
           colorCounts[hex] = (colorCounts[hex] || 0) + 1;
         }
 
-        const sortedColors = Object.entries(colorCounts)
+        let sortedColors = Object.entries(colorCounts)
           .sort((a, b) => b[1] - a[1])
           .slice(0, 4)
           .map(([hex]) => hex);
 
+        if (sortedColors.length === 0) {
+          sortedColors = ['#FFFFFF'];
+        }
+
         // Check if colors match approved brand palette approximately
+        const paletteToCheck = approvedPalette && approvedPalette.length > 0 ? approvedPalette : APPROVED_BRAND_PALETTE;
         const isOffPalette = sortedColors.some((sampledHex) => {
-          return !APPROVED_BRAND_PALETTE.some((approvedHex) => {
+          return !paletteToCheck.some((approvedHex) => {
             return isColorSimilar(sampledHex, approvedHex, 100);
           });
         });

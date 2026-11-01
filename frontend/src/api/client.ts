@@ -285,6 +285,8 @@ class ApiClient {
       contrast_ratio?: number;
       palette_unsampleable?: boolean;
       pages?: any[];
+      image_url?: string | null;
+      alt_text?: string | null;
     }
   ): Promise<{
     findings: Finding[];

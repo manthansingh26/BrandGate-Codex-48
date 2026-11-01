@@ -32,7 +32,7 @@ class DraftCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200, description="Draft headline or title")
     body_text: str = Field(..., min_length=1, max_length=10000, description="Primary content body text to review")
     alt_text: Optional[str] = Field(None, max_length=1000, description="Image accessibility alt text")
-    image_url: Optional[str] = Field(None, max_length=2000, description="Optional creative image URL")
+    image_url: Optional[str] = Field(None, max_length=10000000, description="Optional creative image URL or data URL")
     created_by_role: Literal["creator", "reviewer", "guest"] = "guest"
 
 
@@ -95,7 +95,7 @@ class AddCommentRequest(BaseModel):
 
 
 class AttachImageRequest(BaseModel):
-    image_url: str = Field(..., min_length=1, max_length=2000, description="Public URL of the uploaded creative image")
+    image_url: str = Field(..., min_length=1, max_length=10000000, description="Public URL or data URL of the uploaded creative image")
     alt_text: Optional[str] = Field(None, max_length=1000, description="Image descriptive accessibility alt text")
     logo_confirmed: bool = Field(False, description="Reviewer confirmed approved current logo only (A-02)")
 
@@ -105,6 +105,8 @@ class ReviewDraftRequest(BaseModel):
     contrast_ratio: Optional[float] = Field(None, description="Calculated WCAG text contrast ratio")
     palette_unsampleable: bool = Field(False, description="Image palette could not be sampled")
     pages: Optional[List[Dict[str, Any]]] = Field(None, description="Optional PDF pages metadata")
+    image_url: Optional[str] = Field(None, max_length=10000000, description="Optional attached creative image URL or data URL")
+    alt_text: Optional[str] = Field(None, max_length=1000, description="Optional attached image alt text")
 
 class BrandCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Brand workspace name")

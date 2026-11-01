@@ -343,6 +343,43 @@ export const Report: React.FC<ReportProps> = ({
             <span className="font-semibold text-zinc-300">Image Alt Text:</span> {draft.alt_text}
           </div>
         )}
+        {draft.image_url && (
+          <div className="mt-4 p-4 rounded-xl bg-black/40 border border-zinc-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                Attached Creative Asset
+              </span>
+              <span className="text-[11px] text-teal-400 font-mono font-medium">
+                Sampling: Approximate · WCAG AA 4.5:1
+              </span>
+            </div>
+            <div className="flex flex-wrap sm:flex-nowrap items-start gap-4">
+              <img
+                src={draft.image_url}
+                alt={draft.alt_text || 'Creative visual asset'}
+                className="max-h-44 rounded-lg border border-zinc-700 object-contain bg-zinc-950"
+              />
+              <div className="text-xs text-zinc-400 space-y-1.5 flex-1">
+                <div>
+                  <span className="font-semibold text-zinc-300">Accessibility Alt Text:</span>{' '}
+                  {draft.alt_text && draft.alt_text.trim() ? (
+                    <span className="text-zinc-200">{draft.alt_text}</span>
+                  ) : (
+                    <span className="text-amber-400 font-medium">None provided (Rule R-09)</span>
+                  )}
+                </div>
+                <div>
+                  <span className="font-semibold text-zinc-300">Brand Logo Check (A-02):</span>{' '}
+                  <span className="text-zinc-400">Reviewer-confirmed only</span>
+                </div>
+                <div>
+                  <span className="font-semibold text-zinc-300">Contrast Threshold:</span>{' '}
+                  <span className="text-zinc-400">WCAG 2.1 AA 4.5:1 minimum standard</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Unextractable Image Warning if present */}

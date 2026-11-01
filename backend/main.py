@@ -29,7 +29,7 @@ from models import (
 )
 from review_engine import run_deterministic_review, apply_fix_to_text, _tag_page
 from llm_review import run_grounded_llm_review
-from document_parser import parse_document, MAX_FILE_SIZE_BYTES
+from document_parser import parse_document, MAX_FILE_SIZE_BYTES, analyze_image_bytes, extract_palette_from_vault
 
 # Configure secure module logger
 logger = logging.getLogger("brandgate.api")
@@ -1055,6 +1055,20 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
     contrast_ratio = payload.contrast_ratio if payload else None
     palette_unsampleable = payload.palette_unsampleable if payload else False
 
+    # Persist and synchronize image asset / alt text if passed in review request
+    draft_updates = {}
+    if payload and payload.image_url is not None:
+        draft_updates["image_url"] = payload.image_url
+        draft["image_url"] = payload.image_url
+    if payload and payload.alt_text is not None:
+        draft_updates["alt_text"] = payload.alt_text
+        draft["alt_text"] = payload.alt_text
+    if draft_updates:
+        try:
+            supabase.table("drafts").update(draft_updates).eq("id", actual_id).execute()
+        except Exception as upd_exc:
+            logger.warning(f"Could not update draft image fields: {upd_exc}")
+
     cached_pages = (payload.pages if payload and payload.pages else None) or _get_cached_pages(actual_id) or _get_cached_pages(draft_id)
     if payload and payload.pages:
         _save_cached_pages(actual_id, payload.pages)
@@ -1066,6 +1080,22 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
         palette_unsampleable = True
     if contrast_ratio is None and doc_meta.get("contrast_ratio") is not None:
         contrast_ratio = doc_meta.get("contrast_ratio")
+
+    # Backend image analysis fallback for data URLs (e.g. solid pink PNG direct review)
+    active_img_url = draft.get("image_url")
+    if active_img_url and active_img_url.startswith("data:image/") and not palette_off:
+        try:
+            parts = active_img_url.split(",", 1)
+            if len(parts) == 2:
+                img_bytes = base64.b64decode(parts[1])
+                approved_palette = extract_palette_from_vault(active_vault_items)
+                img_analysis = analyze_image_bytes(img_bytes, approved_palette)
+                if img_analysis.get("is_off_palette"):
+                    palette_off = True
+                if contrast_ratio is None and img_analysis.get("contrast_ratio") is not None:
+                    contrast_ratio = img_analysis.get("contrast_ratio")
+        except Exception as img_exc:
+            logger.warning(f"Backend image analysis fallback failed: {img_exc}")
 
     validated_findings = run_deterministic_review(
         body_text=draft.get("body_text", ""),

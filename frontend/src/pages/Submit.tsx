@@ -3,7 +3,7 @@ import { Draft, Finding, ApiConnectionStatus, Brand } from '../types';
 import { api } from '../api/client';
 import { supabase } from '../supabase';
 import { runLocalDemoReview } from '../utils/localReviewEngine';
-import { sampleImageColors, calculateContrastRatio, calculateSampledColorsContrast, ContrastResult } from '../utils/imageAnalysis';
+import { sampleImageColors, calculateContrastRatio, calculateSampledColorsContrast, ContrastResult, APPROVED_BRAND_PALETTE } from '../utils/imageAnalysis';
 import { BrandSwitcher } from '../components/BrandSwitcher';
 import { ShieldCheck, AlertCircle, RefreshCw, CheckCircle2, Image as ImageIcon, Eye, FileText, Upload, Info, AlertTriangle } from 'lucide-react';
 
@@ -193,12 +193,18 @@ export const Submit: React.FC<SubmitProps> = ({
     setUploading(true);
 
     try {
-      // 1. Generate local preview for immediate display
-      const localUrl = URL.createObjectURL(file);
-      setImagePreview(localUrl);
+      // 1. Read file as durable Base64 Data URL (ensures image survives even without external S3)
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      setImagePreview(dataUrl);
 
       // 2. Perform client-side canvas palette extraction (Approximate)
-      const paletteAnalysis = await sampleImageColors(localUrl);
+      const currentBrandPalette = isBrandB ? ['#06B6D4', '#0B0F19'] : APPROVED_BRAND_PALETTE;
+      const paletteAnalysis = await sampleImageColors(dataUrl, currentBrandPalette);
       if (paletteAnalysis.status === 'unavailable' || paletteAnalysis.sampledColors.length === 0) {
         setPaletteUnsampleable(true);
         setSampledColors([]);
@@ -213,23 +219,27 @@ export const Submit: React.FC<SubmitProps> = ({
 
       // 3. If Supabase client is configured, upload to public bucket "brandgate-creatives"
       if (supabase) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `creative-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        try {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `creative-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-        const { data: uploadData, error: uploadErr } = await supabase.storage
-          .from('brandgate-creatives')
-          .upload(fileName, file, {
-            cacheControl: '3600',
-            upsert: false,
-          });
-
-        if (!uploadErr && uploadData) {
-          const { data: publicUrlData } = supabase.storage
+          const { data: uploadData, error: uploadErr } = await supabase.storage
             .from('brandgate-creatives')
-            .getPublicUrl(fileName);
-          if (publicUrlData?.publicUrl) {
-            setImagePreview(publicUrlData.publicUrl);
+            .upload(fileName, file, {
+              cacheControl: '3600',
+              upsert: false,
+            });
+
+          if (!uploadErr && uploadData) {
+            const { data: publicUrlData } = supabase.storage
+              .from('brandgate-creatives')
+              .getPublicUrl(fileName);
+            if (publicUrlData?.publicUrl) {
+              setImagePreview(publicUrlData.publicUrl);
+            }
           }
+        } catch (storageErr) {
+          console.warn('Supabase storage upload fallback to durable data URL:', storageErr);
         }
       }
     } catch (err: any) {
@@ -256,8 +266,8 @@ export const Submit: React.FC<SubmitProps> = ({
       let draftId = currentDraft?.id;
 
       if (apiStatus === 'connected') {
-        // Do not persist temporary local blob: URLs as durable public assets on server
-        const durableImageUrl = imagePreview && !imagePreview.startsWith('blob:') ? imagePreview : null;
+        // Durable image URL: data: URLs or public https URLs are both fully durable
+        const durableImageUrl = imagePreview || null;
 
         const targetBrandId = activeBrand?.id || '00000000-0000-0000-0000-000000000001';
         const defaultFallbackTitle = isBrandB ? 'NovaTech ANC 500 Launch Campaign' : 'Diwali Festive Cookware Campaign';
@@ -311,7 +321,7 @@ export const Submit: React.FC<SubmitProps> = ({
             image_url: durableImageUrl,
             alt_text: altText || null,
             logo_confirmed: logoConfirmed,
-          });
+          }).catch((err) => console.warn('attachImage non-fatal fallback:', err));
         }
 
         // Run server-side review with image checks wired (Blocker 3) and docPages passed
@@ -322,8 +332,16 @@ export const Submit: React.FC<SubmitProps> = ({
           contrast_ratio: activeContrast,
           palette_unsampleable: paletteUnsampleable,
           pages: docPages || undefined,
+          image_url: durableImageUrl,
+          alt_text: altText || null,
         });
         const updatedDraft = await api.getDraft(draftId);
+        if (!updatedDraft.image_url && durableImageUrl) {
+          updatedDraft.image_url = durableImageUrl;
+        }
+        if (updatedDraft.alt_text === undefined && altText) {
+          updatedDraft.alt_text = altText;
+        }
         onReviewCompleted(updatedDraft, reviewRes.findings, reviewRes.llm_review);
       } else {
         // Local demo mode review (when API offline)
@@ -642,7 +660,7 @@ export const Submit: React.FC<SubmitProps> = ({
               <div className="p-3.5 rounded-xl bg-black/40 border border-zinc-800 space-y-2.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-semibold text-zinc-300">Dominant Sampled Colors</span>
-                  <span className="text-[10px] text-zinc-500 font-mono">Label: Approximate</span>
+                  <span className="text-[10px] text-zinc-400 font-mono">Sampling: Approximate</span>
                 </div>
                 <div className="flex items-center gap-2">
                   {sampledColors.map((hex, idx) => (
@@ -669,10 +687,15 @@ export const Submit: React.FC<SubmitProps> = ({
                   </div>
                 )}
 
+                <div className="pt-1.5 border-t border-zinc-800/60 flex items-center justify-between text-[10px] font-mono text-zinc-500">
+                  <span>WCAG AA 4.5:1 contrast threshold</span>
+                  <span>Logo (A-02): Reviewer-confirmed only</span>
+                </div>
+
                 {isOffPalette && (
                   <p className="text-[11px] text-amber-400 flex items-center gap-1 font-medium pt-1">
                     <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
-                    Palette sampling is approximate — Human Decision required (Rule {isBrandB ? 'P-10' : 'P-01'}). Never an automatic contradiction.
+                    Sampling: Approximate — Human Decision required (Rule {isBrandB ? 'P-10' : 'P-01'}). Never an automatic contradiction.
                   </p>
                 )}
               </div>

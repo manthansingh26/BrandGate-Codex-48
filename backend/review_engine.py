@@ -241,9 +241,9 @@ def run_deterministic_review(
     # --------------------------------------------------------------------------
     # 5. Alt-Text Check (Cited R-09)
     # --------------------------------------------------------------------------
-    r09_rule = next((item for item in rules if item.get("item_id") == "R-09"), None)
+    r09_rule = next((item for item in rules if item.get("item_id") == "R-09"), None) or next((item for item in active_vault_items if item.get("item_id") == "R-09"), None)
     if r09_rule and image_url:
-        if not alt_text or not alt_text.strip():
+        if not alt_text or not str(alt_text).strip():
             finding = {
                 "lane": "human_decision",
                 "severity": "high",
@@ -271,13 +271,13 @@ def run_deterministic_review(
     # --------------------------------------------------------------------------
     # 7. Approximate Palette Check (Cited P-01)
     # --------------------------------------------------------------------------
-    if palette_off and palettes:
-        p01_item = next((item for item in palettes if item.get("item_id") == "P-01"), palettes[0])
+    if palette_off and (palettes or image_url):
+        p01_item = next((item for item in palettes if item.get("item_id") == "P-01"), None) or (palettes[0] if palettes else {"item_id": "P-01"})
         finding = {
             "lane": "human_decision",
             "severity": "low",
-            "citation_id": p01_item.get("item_id"),
-            "explanation": "Palette sampling is approximate — reviewer to confirm brand color alignment with approved palette.",
+            "citation_id": p01_item.get("item_id", "P-01"),
+            "explanation": "Sampling: Approximate — reviewer to confirm brand color alignment with approved palette.",
             "suggested_fix": None
         }
         raw_findings.append(_tag_page(finding, None, pages))
