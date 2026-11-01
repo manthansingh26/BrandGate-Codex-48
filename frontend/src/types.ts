@@ -1,6 +1,7 @@
 export interface Brand {
   id: string;
   name: string;
+  created_by?: string;
   created_at?: string;
 }
 
@@ -31,6 +32,7 @@ export type FindingSeverity = 'high' | 'medium' | 'low';
 export interface Finding {
   id?: string;
   draft_id?: string;
+  brand_id?: string;
   version_no?: number;
   lane: FindingLane;
   severity: FindingSeverity;
@@ -78,11 +80,13 @@ export interface ApprovedSnapshot {
   approver_id?: string | null;
   timestamp: string;
   vault_version: string;
+  brand_id?: string;
 }
 
 export interface ReviseDraftResponse {
   id: string;
   draft_id: string;
+  brand_id?: string;
   version_no: number;
   body_text: string;
   alt_text?: string | null;
@@ -90,6 +94,7 @@ export interface ReviseDraftResponse {
 }
 
 export interface InsightsData {
+  brand_id?: string;
   total_findings: number;
   counts_by_citation: Record<string, number>;
   counts_by_lane: Record<string, number>;

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Draft, Finding, UserRole, Decision } from '../types';
+import { Draft, Finding, UserRole, Decision, Brand } from '../types';
 import { api } from '../api/client';
+import { BrandSwitcher } from '../components/BrandSwitcher';
 import {
   Lock,
   Clock,
@@ -24,9 +25,22 @@ interface ReviewProps {
   onDraftUpdated: (draft: Draft) => void;
   onRoleChange?: (role: UserRole) => void;
   isRestoringDraft?: boolean;
+  availableBrands?: Brand[];
+  activeBrand?: Brand | null;
+  onSelectBrand?: (brand: Brand) => void;
 }
 
-export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDraftUpdated, onRoleChange, isRestoringDraft }) => {
+export const Review: React.FC<ReviewProps> = ({
+  draft,
+  findings,
+  userRole,
+  onDraftUpdated,
+  onRoleChange,
+  isRestoringDraft,
+  availableBrands,
+  activeBrand,
+  onSelectBrand,
+}) => {
   const [commentText, setCommentText] = useState('');
   const [changesComment, setChangesComment] = useState('');
   const [showChangesModal, setShowChangesModal] = useState(false);
@@ -45,8 +59,20 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
       );
     }
     return (
-      <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-4">
-        <p className="text-zinc-400 text-sm">Draft not found — start a new demo draft</p>
+      <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-6">
+        {availableBrands && availableBrands.length > 0 && onSelectBrand && (
+          <div className="max-w-md mx-auto p-4 rounded-2xl bg-zinc-950 border border-zinc-800 shadow-lg">
+            <BrandSwitcher
+              availableBrands={availableBrands}
+              activeBrand={activeBrand || null}
+              onSelectBrand={onSelectBrand}
+              variant="pills"
+            />
+          </div>
+        )}
+        <p className="text-zinc-400 text-sm">
+          No active draft for <span className="text-white font-medium">{activeBrand?.name || 'this brand'}</span> — create or test a draft from Home.
+        </p>
         <button
           onClick={() => {
             if (typeof window !== 'undefined') {
@@ -54,7 +80,7 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
               window.dispatchEvent(new PopStateEvent('popstate'));
             }
           }}
-          className="btn-primary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs"
+          className="btn-primary-micro inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs shadow-lg shadow-teal-500/20"
         >
           Return to Home
         </button>
@@ -209,6 +235,15 @@ export const Review: React.FC<ReviewProps> = ({ draft, findings, userRole, onDra
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-3">
+          {availableBrands && availableBrands.length > 0 && onSelectBrand && (
+            <BrandSwitcher
+              availableBrands={availableBrands}
+              activeBrand={activeBrand || null}
+              onSelectBrand={onSelectBrand}
+              variant="compact"
+            />
+          )}
+
           {/* Fix 4: Visible Switch to Reviewer action next to disabled Demo Reviewer Approve */}
           {onRoleChange && !isApproved && userRole !== 'reviewer' && (
             <button

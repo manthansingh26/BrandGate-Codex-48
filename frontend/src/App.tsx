@@ -60,7 +60,44 @@ export const App: React.FC = () => {
   };
   const [wakingElapsed, setWakingElapsed] = useState<number>(0);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
-  const [activeBrand, setActiveBrand] = useState<Brand | null>(null);
+
+  const [availableBrands, setAvailableBrands] = useState<Brand[]>([
+    { id: '00000000-0000-0000-0000-000000000001', name: 'Demo Brand (Seeded)', created_by: 'system' },
+    { id: '00000000-0000-0000-0000-000000000002', name: 'NovaTech Audio (Demo)', created_by: 'system' },
+  ]);
+
+  const [activeBrand, setActiveBrand] = useState<Brand | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedBrandId = localStorage.getItem('brandgate_active_brand_id');
+        if (savedBrandId === '00000000-0000-0000-0000-000000000002') {
+          return { id: '00000000-0000-0000-0000-000000000002', name: 'NovaTech Audio (Demo)', created_by: 'system' };
+        }
+      } catch {}
+    }
+    return { id: '00000000-0000-0000-0000-000000000001', name: 'Demo Brand (Seeded)', created_by: 'system' };
+  });
+
+  const handleBrandChange = (brand: Brand) => {
+    if (activeBrand?.id === brand.id) return;
+    setActiveBrand(brand);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('brandgate_active_brand_id', brand.id);
+        // Clear previous brand draft state completely (never leak state to new brand)
+        localStorage.removeItem('brandgate_active_draft_id');
+        localStorage.removeItem('brandgate_active_draft');
+        localStorage.removeItem('brandgate_draft_findings');
+        localStorage.removeItem('brandgate_llm_review');
+        sessionStorage.removeItem('brandgate_active_draft');
+        sessionStorage.removeItem('brandgate_draft_findings');
+        sessionStorage.removeItem('brandgate_llm_review');
+      } catch {}
+    }
+    setActiveDraft(null);
+    setDraftFindings([]);
+    setLlmReviewResult(null);
+  };
 
   // Persona persistence in shared localStorage across browser reloads
   const [userRole, setUserRole] = useState<UserRole>(() => {
@@ -134,6 +171,13 @@ export const App: React.FC = () => {
         setIsRestoringDraft(true);
         try {
           const fetchedDraft = await api.getDraft(savedDraftId);
+          // Tenant isolation check: only restore if draft matches active brand
+          if (activeBrand && fetchedDraft.brand_id && fetchedDraft.brand_id !== activeBrand.id) {
+            localStorage.removeItem('brandgate_active_draft_id');
+            localStorage.removeItem('brandgate_active_draft');
+            return;
+          }
+
           setActiveDraft(fetchedDraft);
           localStorage.setItem('brandgate_active_draft', JSON.stringify(fetchedDraft));
 
@@ -159,7 +203,7 @@ export const App: React.FC = () => {
     if (apiStatus === 'connected') {
       restoreDraftFromBackend();
     }
-  }, [apiStatus]);
+  }, [apiStatus, activeBrand?.id]);
 
   // HTML5 History API popstate synchronization (Back / Forward buttons)
   useEffect(() => {
@@ -240,16 +284,14 @@ export const App: React.FC = () => {
       try {
         const brands = await api.getBrands();
         if (brands && brands.length > 0) {
-          setActiveBrand(brands[0]);
+          setAvailableBrands(brands);
+          const savedBrandId = typeof window !== 'undefined' ? localStorage.getItem('brandgate_active_brand_id') : null;
+          const found = savedBrandId ? brands.find((b) => b.id === savedBrandId) : null;
+          setActiveBrand(found || brands[0]);
         }
       } catch (err) {
         console.warn('Could not load brands from API:', err);
       }
-    } else {
-      setActiveBrand({
-        id: '00000000-0000-0000-0000-000000000001',
-        name: 'Demo Brand (Seeded)',
-      });
     }
   };
 
@@ -265,7 +307,10 @@ export const App: React.FC = () => {
             try {
               const brands = await api.getBrands();
               if (brands && brands.length > 0) {
-                setActiveBrand(brands[0]);
+                setAvailableBrands(brands);
+                const savedBrandId = typeof window !== 'undefined' ? localStorage.getItem('brandgate_active_brand_id') : null;
+                const found = savedBrandId ? brands.find((b) => b.id === savedBrandId) : null;
+                setActiveBrand(found || brands[0]);
               }
             } catch {
               // Brand fetch failed — run full health check to verify connection
@@ -372,12 +417,17 @@ export const App: React.FC = () => {
           onSignOut={handleSignOut}
           onRefreshHealth={initApp}
           wakingElapsed={wakingElapsed}
+          availableBrands={availableBrands}
+          activeBrand={activeBrand}
+          onSelectBrand={handleBrandChange}
         />
 
         <main className="flex-1">
           {activeTab === 'home' && (
             <Home
               activeBrand={activeBrand}
+              availableBrands={availableBrands}
+              onSelectBrand={handleBrandChange}
               currentDraft={activeDraft}
               onDraftCreated={handleDraftCreated}
               onNavigateToVault={() => navigateToTab('vault')}
@@ -385,7 +435,12 @@ export const App: React.FC = () => {
             />
           )}
           {activeTab === 'vault' && (
-            <Vault activeBrand={activeBrand} currentUserEmail={currentUserEmail} />
+            <Vault
+              activeBrand={activeBrand}
+              availableBrands={availableBrands}
+              onSelectBrand={handleBrandChange}
+              currentUserEmail={currentUserEmail}
+            />
           )}
           {activeTab === 'submit' && (
             <Submit
@@ -414,10 +469,17 @@ export const App: React.FC = () => {
               onDraftUpdated={handleDraftUpdated}
               onRoleChange={handleRoleChange}
               isRestoringDraft={isRestoringDraft}
+              availableBrands={availableBrands}
+              activeBrand={activeBrand}
+              onSelectBrand={handleBrandChange}
             />
           )}
           {activeTab === 'insights' && (
-            <Insights activeBrand={activeBrand} />
+            <Insights
+              activeBrand={activeBrand}
+              availableBrands={availableBrands}
+              onSelectBrand={handleBrandChange}
+            />
           )}
         </main>
       </div>

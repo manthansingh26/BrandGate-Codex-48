@@ -23,6 +23,7 @@ from models import (
     AddCommentRequest,
     AttachImageRequest,
     ReviewDraftRequest,
+    BrandCreate,
 )
 from review_engine import run_deterministic_review, apply_fix_to_text
 from llm_review import run_grounded_llm_review
@@ -34,6 +35,8 @@ logger = logging.getLogger("brandgate.api")
 load_dotenv(override=True)
 
 DEMO_BRAND_ID = "00000000-0000-0000-0000-000000000001"
+DEMO_BRAND_B_ID = "00000000-0000-0000-0000-000000000002"
+DEMO_BRAND_IDS = {DEMO_BRAND_ID, DEMO_BRAND_B_ID}
 
 # Guest demo draft aliases in-memory map to canonical database UUIDs
 _DEMO_DRAFT_MAPPINGS: Dict[str, str] = {}
@@ -168,15 +171,15 @@ def verify_brand_exists(supabase, brand_id: str):
 def check_brand_access(user: Optional[Dict[str, Any]], brand_id: str, write: bool = False):
     """
     Enforces server-side brand authorization:
-    - Guests are strictly limited to DEMO_BRAND_ID.
-    - Demo brand vault is read-only for guests (write=True raises 403).
-    - If brand_id is not DEMO_BRAND_ID and caller is unauthenticated, raises 403.
+    - Guests are strictly limited to DEMO_BRAND_IDS (Brand A and Brand B).
+    - Demo brand vaults are read-only for guests (write=True raises 403).
+    - If brand_id is not in DEMO_BRAND_IDS and caller is unauthenticated, raises 403.
     """
     if not user:
-        if brand_id != DEMO_BRAND_ID:
+        if brand_id not in DEMO_BRAND_IDS:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Guest operations are restricted strictly to the seeded demo brand."
+                detail="Guest operations are restricted strictly to the seeded demo brands."
             )
         if write:
             raise HTTPException(
@@ -187,7 +190,7 @@ def check_brand_access(user: Optional[Dict[str, Any]], brand_id: str, write: boo
 def verify_draft_access(supabase, draft_id: str, user: Optional[Dict[str, Any]], required_role: Optional[str] = None) -> Dict[str, Any]:
     """
     Fetches draft and verifies caller has legitimate tenant / role access:
-    - Guests can ONLY access drafts belonging to DEMO_BRAND_ID.
+    - Guests can ONLY access drafts belonging to DEMO_BRAND_IDS.
     - If user is present, verifies role matches required_role (if specified).
     - Safely resolves guest demo draft aliases (local-draft-*, demo, etc.) without SQL syntax errors.
     """
@@ -196,7 +199,7 @@ def verify_draft_access(supabase, draft_id: str, user: Optional[Dict[str, Any]],
     is_demo_alias = (
         draft_id_str.startswith("local-draft-") or
         draft_id_str.startswith("local-") or
-        draft_id_str.lower() in ("demo", "demo-draft", "guest-demo", "default")
+        draft_id_str.lower() in ("demo", "demo-draft", "guest-demo", "default", "demo-b", "demo-brand-b")
     )
 
     # First, if it is a demo alias and we have a mapped real UUID, use that
@@ -224,18 +227,34 @@ def verify_draft_access(supabase, draft_id: str, user: Optional[Dict[str, Any]],
     if draft_res and draft_res.data:
         draft = draft_res.data[0]
     elif is_demo_alias:
-        # Initialize fresh demo draft for DEMO_BRAND_ID with locked test creative
-        LOCKED_DEMO_TEXT = "Diwali Dhamaka! India's No. 1 cookware brand — clinically proven non-stick — now for just Rs. 999!"
-        demo_record = {
-            "brand_id": DEMO_BRAND_ID,
-            "title": "Diwali Festive Cookware Campaign",
-            "body_text": LOCKED_DEMO_TEXT,
-            "alt_text": None,
-            "image_url": None,
-            "status": "draft",
-            "current_version": 1,
-            "created_by_role": "guest",
-        }
+        is_b_brand = ("-b" in draft_id_str.lower() or "_b" in draft_id_str.lower() or "novatech" in draft_id_str.lower())
+        target_demo_brand = DEMO_BRAND_B_ID if is_b_brand else DEMO_BRAND_ID
+
+        if is_b_brand:
+            locked_text = "Experience NovaTech ANC 500 with world's best audio and 80-hour battery life — now for just Rs. 3,499!"
+            demo_record = {
+                "brand_id": DEMO_BRAND_B_ID,
+                "title": "NovaTech ANC 500 Launch Campaign",
+                "body_text": locked_text,
+                "alt_text": None,
+                "image_url": None,
+                "status": "draft",
+                "current_version": 1,
+                "created_by_role": "guest",
+            }
+        else:
+            LOCKED_DEMO_TEXT = "Diwali Dhamaka! India's No. 1 cookware brand — clinically proven non-stick — now for just Rs. 999!"
+            demo_record = {
+                "brand_id": DEMO_BRAND_ID,
+                "title": "Diwali Festive Cookware Campaign",
+                "body_text": LOCKED_DEMO_TEXT,
+                "alt_text": None,
+                "image_url": None,
+                "status": "draft",
+                "current_version": 1,
+                "created_by_role": "guest",
+            }
+
         res = supabase.table("drafts").insert(demo_record).execute()
         if not res.data:
             raise HTTPException(status_code=500, detail="Failed to initialize demo draft")
@@ -244,7 +263,7 @@ def verify_draft_access(supabase, draft_id: str, user: Optional[Dict[str, Any]],
         supabase.table("draft_versions").insert({
             "draft_id": actual_id,
             "version_no": 1,
-            "body_text": LOCKED_DEMO_TEXT,
+            "body_text": demo_record["body_text"],
             "alt_text": None,
         }).execute()
         _DEMO_DRAFT_MAPPINGS[draft_id_str] = actual_id
@@ -257,13 +276,13 @@ def verify_draft_access(supabase, draft_id: str, user: Optional[Dict[str, Any]],
     brand_id = draft.get("brand_id")
 
     if not user:
-        if brand_id != DEMO_BRAND_ID:
+        if brand_id not in DEMO_BRAND_IDS:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Guest access is restricted strictly to seeded demo brand drafts."
             )
     else:
-        if brand_id != DEMO_BRAND_ID:
+        if brand_id not in DEMO_BRAND_IDS:
             if user.get("role") != "reviewer" and draft.get("created_by_user_id") != user.get("id"):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -279,7 +298,7 @@ def verify_draft_access(supabase, draft_id: str, user: Optional[Dict[str, Any]],
     return draft
 
 # ------------------------------------------------------------------------------
-# Brands API (Blocker 1)
+# Brands API (Blocker 1 & Multi-brand)
 # ------------------------------------------------------------------------------
 @app.get("/api/brands", summary="List all brands")
 def list_brands(request: Request = None):
@@ -288,10 +307,49 @@ def list_brands(request: Request = None):
     supabase = get_supabase()
     res = supabase.table("brands").select("*").order("name").execute()
     all_brands = res.data or []
+
+    enriched = []
+    for b in all_brands:
+        brand_item = dict(b)
+        if "created_by" not in brand_item or not brand_item["created_by"]:
+            brand_item["created_by"] = "system" if brand_item.get("id") in DEMO_BRAND_IDS else "user"
+        enriched.append(brand_item)
+
     if not user:
-        # Guests only see the seeded demo brand
-        return [b for b in all_brands if b.get("id") == DEMO_BRAND_ID]
-    return all_brands
+        # Guests can see both seeded demo brands
+        return [b for b in enriched if b.get("id") in DEMO_BRAND_IDS]
+    return enriched
+
+@app.post("/api/brands", summary="Create a new brand", status_code=status.HTTP_201_CREATED)
+def create_brand(payload: BrandCreate, request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+    creator_id = user["id"] if user else "guest"
+    supabase = get_supabase()
+
+    new_brand_id = str(uuid.uuid4())
+    record = {
+        "id": new_brand_id,
+        "name": payload.name,
+    }
+    res = supabase.table("brands").insert(record).execute()
+    if not res.data:
+        raise HTTPException(status_code=500, detail="Failed to create brand.")
+    created = dict(res.data[0])
+    created["created_by"] = creator_id
+    return created
+
+@app.get("/api/brands/{brand_id}", summary="Get a brand by ID")
+def get_brand(brand_id: str, request: Request = None):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+    check_brand_access(user, brand_id, write=False)
+    supabase = get_supabase()
+    b = verify_brand_exists(supabase, brand_id)
+    brand = dict(b)
+    if "created_by" not in brand or not brand["created_by"]:
+        brand["created_by"] = "system" if brand_id in DEMO_BRAND_IDS else "user"
+    return brand
 
 # ------------------------------------------------------------------------------
 # Vault Items API (Blocker 1)
@@ -410,122 +468,165 @@ def reset_demo_vault(brand_id: str, request: Request = None):
     user = get_authenticated_user(auth_header)
     check_brand_access(user, brand_id, write=True)
 
-    # Enforce guest demo scoping: only the demo brand can be reset
-    if brand_id != DEMO_BRAND_ID:
+    # Enforce guest demo scoping: only demo brands can be reset
+    if brand_id not in DEMO_BRAND_IDS:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Reset operation is permitted strictly for the seeded demo brand."
+            detail="Reset operation is permitted strictly for seeded demo brands."
         )
 
     supabase = get_supabase()
     verify_brand_exists(supabase, brand_id)
 
-
     # 1. Clear existing items for this brand
     supabase.table("vault_items").delete().eq("brand_id", brand_id).execute()
 
-    # 2. Re-insert the exact Phase 1 demo items
-    demo_items = [
-        {
-            "brand_id": brand_id,
-            "item_id": "F-12",
-            "kind": "fact",
-            "title": "Festive Cookware Promotional Price",
-            "text": "Festive cookware offer Rs. 1,299, effective 24-31 Oct 2026.",
-            "status": "active"
-        },
-        {
-            "brand_id": brand_id,
-            "item_id": "R-04",
-            "kind": "rule",
-            "title": "Superlatives & Ranking Claims Require Approved Evidence",
-            "text": "Rank and performance superlatives require an approved evidence record. Seeded vault has NO approved evidence records.",
-            "status": "active"
-        },
-        {
-            "brand_id": brand_id,
-            "item_id": "A-02",
-            "kind": "rule",
-            "title": "Approved Current Logo Requirement",
-            "text": "Current approved logo file only; archived logo is not accepted.",
-            "status": "active"
-        },
-        {
-            "brand_id": brand_id,
-            "item_id": "R-09",
-            "kind": "rule",
-            "title": "Mandatory Descriptive Image Alt Text",
-            "text": "Every creative requires descriptive alt text.",
-            "status": "active"
-        },
-        {
-            "brand_id": brand_id,
-            "item_id": "T-01",
-            "kind": "terminology",
-            "title": "Restricted Term: clinically proven",
-            "text": 'Term "clinically proven" is categorized as evidence_required. Cannot be used without an approved clinical trial citation ID.',
-            "status": "active"
-        },
-        {
-            "brand_id": brand_id,
-            "item_id": "T-02",
-            "kind": "terminology",
-            "title": "Restricted Term: India's No. 1",
-            "text": 'Term "India\'s No. 1" is categorized as evidence_required. Cannot be used without a market research verification citation ID.',
-            "status": "active"
-        },
-        {
-            "brand_id": brand_id,
-            "item_id": "T-03",
-            "kind": "terminology",
-            "title": "Approved Term: certified quality",
-            "text": 'Term "certified quality" is an approved replacement for unsubstantiated superiority claims.',
-            "status": "active"
-        },
-        {
-            "brand_id": brand_id,
-            "item_id": "T-04",
-            "kind": "terminology",
-            "title": "Approved Term: trusted cookware brand",
-            "text": 'Term "trusted cookware brand" is an approved replacement for unsupported ranking claims.',
-            "status": "active"
-        },
-        {
-            "brand_id": brand_id,
-            "item_id": "P-01",
-            "kind": "palette",
-            "title": "Primary Brand Blue",
-            "text": "#1E3A8A - Seeded Primary Blue for headers, hero elements, and primary buttons.",
-            "status": "active"
-        },
-        {
-            "brand_id": brand_id,
-            "item_id": "P-02",
-            "kind": "palette",
-            "title": "Secondary Accent Amber",
-            "text": "#D97706 - Seeded Secondary Amber for highlight badges and key callouts.",
-            "status": "active"
-        },
-        {
-            "brand_id": brand_id,
-            "item_id": "P-03",
-            "kind": "palette",
-            "title": "Surface Neutral Light",
-            "text": "#F8FAFC - Seeded background color for clean, neutral canvas.",
-            "status": "active"
-        },
-        {
-            "brand_id": brand_id,
-            "item_id": "P-04",
-            "kind": "palette",
-            "title": "Text Slate Dark",
-            "text": "#0F172A - Seeded high-contrast text color.",
-            "status": "active"
-        }
-    ]
+    # 2. Re-insert items for the respective demo brand
+    if brand_id == DEMO_BRAND_B_ID:
+        demo_items = [
+            {
+                "brand_id": brand_id,
+                "item_id": "F-20",
+                "kind": "fact",
+                "title": "NovaTech ANC 500 Launch Price",
+                "text": "NovaTech ANC 500 Wireless Headphones launch price Rs. 4,999, effective 1-15 Nov 2026.",
+                "status": "active"
+            },
+            {
+                "brand_id": brand_id,
+                "item_id": "R-15",
+                "kind": "rule",
+                "title": "Battery Life & Latency Claims Require Verified Lab Benchmarks",
+                "text": "Battery life and latency claims require verified lab test benchmarks. Seeded vault has NO approved lab benchmarks.",
+                "status": "active"
+            },
+            {
+                "brand_id": brand_id,
+                "item_id": "T-10",
+                "kind": "terminology",
+                "title": "Restricted Term: world's best audio",
+                "text": 'Term "world\'s best audio" is restricted. Cannot be used without third-party acoustic certification.',
+                "status": "active"
+            },
+            {
+                "brand_id": brand_id,
+                "item_id": "P-10",
+                "kind": "palette",
+                "title": "Midnight Obsidian Primary",
+                "text": "#0F172A - Seeded Midnight Obsidian primary chassis color.",
+                "status": "active"
+            },
+            {
+                "brand_id": brand_id,
+                "item_id": "P-11",
+                "kind": "palette",
+                "title": "Electric Cyan Accent",
+                "text": "#06B6D4 - Seeded Electric Cyan accent led color.",
+                "status": "active"
+            }
+        ]
+    else:
+        demo_items = [
+            {
+                "brand_id": brand_id,
+                "item_id": "F-12",
+                "kind": "fact",
+                "title": "Festive Cookware Promotional Price",
+                "text": "Festive cookware offer Rs. 1,299, effective 24-31 Oct 2026.",
+                "status": "active"
+            },
+            {
+                "brand_id": brand_id,
+                "item_id": "R-04",
+                "kind": "rule",
+                "title": "Superlatives & Ranking Claims Require Approved Evidence",
+                "text": "Rank and performance superlatives require an approved evidence record. Seeded vault has NO approved evidence records.",
+                "status": "active"
+            },
+            {
+                "brand_id": brand_id,
+                "item_id": "A-02",
+                "kind": "rule",
+                "title": "Approved Current Logo Requirement",
+                "text": "Current approved logo file only; archived logo is not accepted.",
+                "status": "active"
+            },
+            {
+                "brand_id": brand_id,
+                "item_id": "R-09",
+                "kind": "rule",
+                "title": "Mandatory Descriptive Image Alt Text",
+                "text": "Every creative requires descriptive alt text.",
+                "status": "active"
+            },
+            {
+                "brand_id": brand_id,
+                "item_id": "T-01",
+                "kind": "terminology",
+                "title": "Restricted Term: clinically proven",
+                "text": 'Term "clinically proven" is categorized as evidence_required. Cannot be used without an approved clinical trial citation ID.',
+                "status": "active"
+            },
+            {
+                "brand_id": brand_id,
+                "item_id": "T-02",
+                "kind": "terminology",
+                "title": "Restricted Term: India's No. 1",
+                "text": 'Term "India\'s No. 1" is categorized as evidence_required. Cannot be used without a market research verification citation ID.',
+                "status": "active"
+            },
+            {
+                "brand_id": brand_id,
+                "item_id": "T-03",
+                "kind": "terminology",
+                "title": "Approved Term: certified quality",
+                "text": 'Term "certified quality" is an approved replacement for unsubstantiated superiority claims.',
+                "status": "active"
+            },
+            {
+                "brand_id": brand_id,
+                "item_id": "T-04",
+                "kind": "terminology",
+                "title": "Approved Term: trusted cookware brand",
+                "text": 'Term "trusted cookware brand" is an approved replacement for unsupported ranking claims.',
+                "status": "active"
+            },
+            {
+                "brand_id": brand_id,
+                "item_id": "P-01",
+                "kind": "palette",
+                "title": "Primary Brand Blue",
+                "text": "#1E3A8A - Seeded Primary Blue for headers, hero elements, and primary buttons.",
+                "status": "active"
+            },
+            {
+                "brand_id": brand_id,
+                "item_id": "P-02",
+                "kind": "palette",
+                "title": "Secondary Accent Amber",
+                "text": "#D97706 - Seeded Secondary Amber for highlight badges and key callouts.",
+                "status": "active"
+            },
+            {
+                "brand_id": brand_id,
+                "item_id": "P-03",
+                "kind": "palette",
+                "title": "Surface Neutral Light",
+                "text": "#F8FAFC - Seeded background color for clean, neutral canvas.",
+                "status": "active"
+            },
+            {
+                "brand_id": brand_id,
+                "item_id": "P-04",
+                "kind": "palette",
+                "title": "Text Slate Dark",
+                "text": "#0F172A - Seeded high-contrast text color.",
+                "status": "active"
+            }
+        ]
 
     res = supabase.table("vault_items").insert(demo_items).execute()
-    return {"status": "reset", "restored_count": len(res.data)}
+    return {"status": "reset", "brand_id": brand_id, "restored_count": len(res.data)}
 
 # ------------------------------------------------------------------------------
 # Drafts API (Blocker 1 & 2)
@@ -598,8 +699,12 @@ def get_draft(draft_id: str, request: Request = None):
     comments_res = supabase.table("comments").select("*").eq("draft_id", actual_id).order("created_at").execute()
     decisions_res = supabase.table("decisions").select("*").eq("draft_id", actual_id).order("created_at").execute()
 
+    findings_data = findings_res.data or []
+    for f in findings_data:
+        f["brand_id"] = draft["brand_id"]
+
     draft["versions"] = versions_res.data or []
-    draft["findings"] = findings_res.data or []
+    draft["findings"] = findings_data
     draft["comments"] = comments_res.data or []
     draft["decisions"] = decisions_res.data or []
 
@@ -624,6 +729,7 @@ def get_draft(draft_id: str, request: Request = None):
             "approver_role": approve_decision.get("role") if approve_decision else "reviewer",
             "timestamp": approve_decision.get("created_at") if approve_decision else draft.get("updated_at"),
             "vault_version": f"{brand_name} (Vault v1)",
+            "brand_id": draft.get("brand_id"),
         }
     else:
         draft["approved_snapshot"] = None
@@ -638,8 +744,14 @@ def list_drafts(brand_id: Optional[str] = Query(None, description="Filter drafts
 
     target_brand = brand_id
     if not user:
-        # Guests can only list drafts for the demo brand
-        target_brand = DEMO_BRAND_ID
+        if target_brand:
+            if target_brand not in DEMO_BRAND_IDS:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Guest operations are restricted strictly to seeded demo brands."
+                )
+        else:
+            target_brand = DEMO_BRAND_ID
     elif target_brand:
         check_brand_access(user, target_brand, write=False)
 
@@ -647,9 +759,11 @@ def list_drafts(brand_id: Optional[str] = Query(None, description="Filter drafts
     if target_brand:
         verify_brand_exists(supabase, target_brand)
         query = query.eq("brand_id", target_brand)
+    elif not user:
+        query = query.in_("brand_id", list(DEMO_BRAND_IDS))
 
     res = query.order("created_at", desc=True).execute()
-    return res.data
+    return res.data or []
 
 # ------------------------------------------------------------------------------
 # Review Engine & Revision Endpoints (Phase 3 & Blocker 1, 2, 3)
@@ -712,6 +826,9 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
         insert_res = supabase.table("findings").insert(findings_to_insert).execute()
         saved_findings = insert_res.data or []
 
+    for f in saved_findings:
+        f["brand_id"] = draft["brand_id"]
+
     # Update draft status to "checked"
     supabase.table("drafts").update({
         "status": "checked"
@@ -764,9 +881,13 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
             "reason": llm_result.get("reason") or "preserved from prior review"
         }
 
+    for f in (llm_result.get("findings") or []):
+        f["brand_id"] = draft["brand_id"]
+
     return {
         "id": actual_id,
         "draft_id": actual_id,
+        "brand_id": draft["brand_id"],
         "deterministic_findings": saved_findings,
         "llm_review": llm_result,
         "findings": saved_findings
@@ -826,7 +947,7 @@ def attach_image(draft_id: str, payload: AttachImageRequest, request: Request = 
             "comment": "Reviewer confirmed current approved logo file only (A-02). Archived logos not accepted.",
         }).execute()
 
-    return {"status": "image_attached", "id": actual_id, "draft_id": actual_id, "image_url": payload.image_url, "version_no": current_ver}
+    return {"status": "image_attached", "id": actual_id, "draft_id": actual_id, "brand_id": draft["brand_id"], "image_url": payload.image_url, "version_no": current_ver}
 
 @app.get("/api/insights", summary="Real database session counts grouped by citation ID")
 def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID"), request: Request = None):
@@ -834,19 +955,32 @@ def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID")
     user = get_authenticated_user(auth_header)
     target_brand = brand_id
     if not user:
-        target_brand = DEMO_BRAND_ID
+        if target_brand:
+            if target_brand not in DEMO_BRAND_IDS:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Guest operations are restricted strictly to seeded demo brands."
+                )
+        else:
+            target_brand = DEMO_BRAND_ID
     elif target_brand:
         check_brand_access(user, target_brand, write=False)
 
     supabase = get_supabase()
 
-    canonical_citations = [
-        "F-12", "R-04", "A-02", "R-09",
-        "P-01", "P-02", "P-03", "P-04",
-        "T-01", "T-02", "T-03", "T-04"
-    ]
+    # Query active vault items for target_brand to establish exact canonical citations for this brand
+    v_query = supabase.table("vault_items").select("item_id").eq("status", "active")
+    if target_brand:
+        v_query = v_query.eq("brand_id", target_brand)
+    vault_items_res = v_query.order("item_id").execute()
+    brand_citations = [item["item_id"] for item in (vault_items_res.data or [])]
+    if not brand_citations:
+        if target_brand == DEMO_BRAND_ID:
+            brand_citations = ["F-12", "R-04", "A-02", "R-09", "P-01", "P-02", "P-03", "P-04", "T-01", "T-02", "T-03", "T-04"]
+        elif target_brand == DEMO_BRAND_B_ID:
+            brand_citations = ["F-20", "R-15", "T-10", "P-10", "P-11"]
 
-    counts_by_citation: Dict[str, int] = {cid: 0 for cid in canonical_citations}
+    counts_by_citation: Dict[str, int] = {cid: 0 for cid in brand_citations}
     counts_by_lane: Dict[str, int] = {
         "contradiction": 0,
         "evidence_needed": 0,
@@ -861,6 +995,7 @@ def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID")
             query = query.in_("draft_id", draft_ids)
         else:
             return {
+                "brand_id": target_brand,
                 "total_findings": 0,
                 "counts_by_citation": counts_by_citation,
                 "counts_by_lane": counts_by_lane,
@@ -879,6 +1014,7 @@ def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID")
             counts_by_lane[lane] = counts_by_lane.get(lane, 0) + 1
 
     return {
+        "brand_id": target_brand,
         "total_findings": len(real_findings),
         "counts_by_citation": counts_by_citation,
         "counts_by_lane": counts_by_lane,
@@ -935,6 +1071,7 @@ def apply_fix(draft_id: str, payload: ApplyFixRequest, request: Request = None):
     return {
         "id": actual_id,
         "draft_id": actual_id,
+        "brand_id": draft["brand_id"],
         "version_no": new_version_no,
         "body_text": new_body,
         "status": "draft"
@@ -969,10 +1106,10 @@ def revise_draft(draft_id: str, payload: ReviseDraftRequest, request: Request = 
 
     supabase.table("drafts").update(update_data).eq("id", actual_id).execute()
 
-    # Return normalized response containing both 'id' and 'draft_id' (Blocker 2)
     return {
         "id": actual_id,
         "draft_id": actual_id,
+        "brand_id": draft["brand_id"],
         "version_no": new_version_no,
         "body_text": payload.body_text,
         "alt_text": update_data.get("alt_text"),
@@ -1048,10 +1185,10 @@ def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request 
         approver_id = user["id"]
     else:
         # Guests can only approve demo drafts in guest demo mode
-        if draft.get("brand_id") != DEMO_BRAND_ID:
+        if draft.get("brand_id") not in DEMO_BRAND_IDS:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Guest demo approval is restricted strictly to the seeded demo brand."
+                detail="Guest demo approval is restricted strictly to seeded demo brands."
             )
         approver_role = "demo_reviewer"
         approver_id = None
@@ -1125,6 +1262,7 @@ def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request 
         "approver_id": approver_id,
         "timestamp": now_iso,
         "vault_version": vault_version_tag,
+        "brand_id": draft.get("brand_id"),
     }
 
     supabase.table("decisions").insert({
@@ -1139,6 +1277,7 @@ def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request 
         "status": "approved",
         "id": actual_id,
         "draft_id": actual_id,
+        "brand_id": draft["brand_id"],
         "snapshot": locked_snapshot,
     }
 
@@ -1159,10 +1298,10 @@ def request_changes(draft_id: str, payload: RequestChangesRequest, request: Requ
             )
         approver_role = "reviewer"
     else:
-        if draft.get("brand_id") != DEMO_BRAND_ID:
+        if draft.get("brand_id") not in DEMO_BRAND_IDS:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Guest review is restricted strictly to the seeded demo brand."
+                detail="Guest review is restricted strictly to seeded demo brands."
             )
         approver_role = "demo_reviewer"
 
@@ -1184,6 +1323,7 @@ def request_changes(draft_id: str, payload: RequestChangesRequest, request: Requ
         "status": "needs_changes",
         "id": actual_id,
         "draft_id": actual_id,
+        "brand_id": draft["brand_id"],
         "comment": payload.comment,
     }
 

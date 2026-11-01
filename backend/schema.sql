@@ -12,6 +12,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS brands (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
+    created_by TEXT DEFAULT 'system',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -76,6 +77,7 @@ CREATE INDEX IF NOT EXISTS idx_draft_versions_draft ON draft_versions(draft_id);
 CREATE TABLE IF NOT EXISTS findings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     draft_id UUID NOT NULL REFERENCES drafts(id) ON DELETE CASCADE,
+    brand_id UUID REFERENCES brands(id) ON DELETE CASCADE,
     version_no INT NOT NULL,
     lane TEXT NOT NULL CHECK (lane IN ('contradiction', 'evidence_needed', 'human_decision')),
     severity TEXT NOT NULL CHECK (severity IN ('high', 'medium', 'low')),
@@ -252,8 +254,8 @@ VALUES (
     '00000000-0000-0000-0000-000000000001',
     'T-04',
     'terminology',
-    'Approved Term: trusted by millions',
-    'Term "trusted by millions" is an approved replacement for unsupported ranking claims.',
+    'Approved Term: trusted cookware brand',
+    'Term "trusted cookware brand" is an approved replacement for unsupported ranking claims.',
     'active'
 )
 ON CONFLICT (brand_id, item_id) DO UPDATE SET
@@ -311,6 +313,95 @@ VALUES (
     'palette',
     'Text Slate Dark',
     '#0F172A - Seeded high-contrast text color.',
+    'active'
+)
+ON CONFLICT (brand_id, item_id) DO UPDATE SET
+    title = EXCLUDED.title,
+    text = EXCLUDED.text,
+    status = EXCLUDED.status;
+
+-- ==============================================================================
+-- Seed Data: Second Demo Brand ("NovaTech Audio (Demo)")
+-- Fixed Brand B UUID for multi-brand guest demo queries: 00000000-0000-0000-0000-000000000002
+-- ==============================================================================
+
+INSERT INTO brands (id, name, created_by, created_at)
+VALUES (
+    '00000000-0000-0000-0000-000000000002',
+    'NovaTech Audio (Demo)',
+    'system',
+    NOW()
+)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
+
+-- F-20: Promotional price fact for Brand B
+INSERT INTO vault_items (brand_id, item_id, kind, title, text, status)
+VALUES (
+    '00000000-0000-0000-0000-000000000002',
+    'F-20',
+    'fact',
+    'NovaSound Pro Launch Price',
+    'NovaSound Pro wireless headphones promotional offer is Rs. 4,999, effective 1-30 Nov 2026.',
+    'active'
+)
+ON CONFLICT (brand_id, item_id) DO UPDATE SET
+    title = EXCLUDED.title,
+    text = EXCLUDED.text,
+    status = EXCLUDED.status;
+
+-- R-15: Technical claims rule for Brand B
+INSERT INTO vault_items (brand_id, item_id, kind, title, text, status)
+VALUES (
+    '00000000-0000-0000-0000-000000000002',
+    'R-15',
+    'rule',
+    'Acoustic & Battery Benchmark Evidence',
+    'Battery life claims exceeding 30 hours and acoustic performance superlatives require certified laboratory benchmark records.',
+    'active'
+)
+ON CONFLICT (brand_id, item_id) DO UPDATE SET
+    title = EXCLUDED.title,
+    text = EXCLUDED.text,
+    status = EXCLUDED.status;
+
+-- T-10: Restricted term for Brand B
+INSERT INTO vault_items (brand_id, item_id, kind, title, text, status)
+VALUES (
+    '00000000-0000-0000-0000-000000000002',
+    'T-10',
+    'terminology',
+    'Restricted Term: world best',
+    'Term "world best" is categorized as evidence_required. Cannot be used without an independent industry award audit.',
+    'active'
+)
+ON CONFLICT (brand_id, item_id) DO UPDATE SET
+    title = EXCLUDED.title,
+    text = EXCLUDED.text,
+    status = EXCLUDED.status;
+
+-- P-10: Brand B Cyan Palette
+INSERT INTO vault_items (brand_id, item_id, kind, title, text, status)
+VALUES (
+    '00000000-0000-0000-0000-000000000002',
+    'P-10',
+    'palette',
+    'Electric Cyan Primary',
+    '#06B6D4 - Primary cyan for audio waveforms and interactive controls.',
+    'active'
+)
+ON CONFLICT (brand_id, item_id) DO UPDATE SET
+    title = EXCLUDED.title,
+    text = EXCLUDED.text,
+    status = EXCLUDED.status;
+
+-- P-11: Brand B Obsidian Palette
+INSERT INTO vault_items (brand_id, item_id, kind, title, text, status)
+VALUES (
+    '00000000-0000-0000-0000-000000000002',
+    'P-11',
+    'palette',
+    'Obsidian Deep',
+    '#0B0F19 - Deep dark background for audio gear presentation.',
     'active'
 )
 ON CONFLICT (brand_id, item_id) DO UPDATE SET

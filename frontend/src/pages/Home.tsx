@@ -2,17 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { Brand, Draft, ApiConnectionStatus } from '../types';
 import { api } from '../api/client';
 import { BrandGateLogo } from '../components/BrandGateLogo';
+import { BrandSwitcher } from '../components/BrandSwitcher';
 import { ArrowRight, ShieldCheck, FileText, Sparkles, Loader2, BookOpen, CheckCircle2, Lock, Zap, AlertTriangle, X } from 'lucide-react';
 
 interface HomeProps {
   activeBrand: Brand | null;
+  availableBrands?: Brand[];
+  onSelectBrand?: (brand: Brand) => void;
   onDraftCreated: (draft: Draft) => void;
   onNavigateToVault?: () => void;
   apiStatus: ApiConnectionStatus;
   currentDraft?: Draft | null;
 }
 
-export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavigateToVault, apiStatus, currentDraft }) => {
+export const Home: React.FC<HomeProps> = ({
+  activeBrand,
+  availableBrands,
+  onSelectBrand,
+  onDraftCreated,
+  onNavigateToVault,
+  apiStatus,
+  currentDraft,
+}) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showReplaceModal, setShowReplaceModal] = useState(false);
@@ -41,8 +52,13 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
     setLoading(true);
     setError(null);
 
-    const exactDemoText =
-      "Diwali Dhamaka! India's No. 1 cookware brand — clinically proven non-stick — now for just Rs. 999!";
+    const isBrandB = activeBrand?.id === '00000000-0000-0000-0000-000000000002';
+    const exactDemoText = isBrandB
+      ? "Experience NovaTech ANC 500 with world's best audio and 80-hour battery life — now for just Rs. 3,499!"
+      : "Diwali Dhamaka! India's No. 1 cookware brand — clinically proven non-stick — now for just Rs. 999!";
+    const demoTitle = isBrandB
+      ? "NovaTech ANC 500 Launch Campaign"
+      : "Diwali Festive Cookware Campaign";
 
     try {
       let brandId = activeBrand?.id;
@@ -59,7 +75,7 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
       if (apiStatus === 'connected') {
         const newDraft = await api.createDraft({
           brand_id: brandId,
-          title: 'Diwali Festive Cookware Campaign',
+          title: demoTitle,
           body_text: exactDemoText,
           alt_text: null,
           image_url: null,
@@ -70,7 +86,7 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
         const localDraft: Draft = {
           id: `local-draft-${Date.now()}`,
           brand_id: brandId,
-          title: 'Diwali Festive Cookware Campaign',
+          title: demoTitle,
           body_text: exactDemoText,
           alt_text: null,
           image_url: null,
@@ -116,6 +132,18 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
           The intelligent governance gate that halts pricing discrepancies, unsubstantiated rank superlatives, and accessibility defects before customer exposure.
         </p>
 
+        {/* Workspace Brand Switcher */}
+        {availableBrands && availableBrands.length > 0 && onSelectBrand && (
+          <div className="order-3 w-full max-w-md mx-auto p-2.5 rounded-2xl bg-zinc-950/80 border border-zinc-800/90 shadow-lg shadow-black/40">
+            <BrandSwitcher
+              availableBrands={availableBrands}
+              activeBrand={activeBrand}
+              onSelectBrand={onSelectBrand}
+              variant="pills"
+            />
+          </div>
+        )}
+
         {/* Double-Bezel Guarantee Card — order-5 on narrow mobile so CTA is above fold; sm:order-4 on desktop */}
         <div className="order-5 sm:order-4 double-bezel max-w-xl mx-auto text-left sm:text-center mt-3 sm:mt-6 w-full">
           <div className="double-bezel-inner p-5 sm:p-7 relative overflow-hidden">
@@ -149,7 +177,7 @@ export const Home: React.FC<HomeProps> = ({ activeBrand, onDraftCreated, onNavig
               </span>
             ) : (
               <>
-                <span>Try the demo draft</span>
+                <span>Try {activeBrand?.name ? `${activeBrand.name} Draft` : 'the demo draft'}</span>
                 <span className="w-8 h-8 rounded-full bg-black/15 flex items-center justify-center transition-transform group-hover:translate-x-0.5">
                   <ArrowRight className="h-4 w-4 text-black" />
                 </span>

@@ -74,28 +74,29 @@ def run_deterministic_review(
     # 1. Price / Number Check
     # --------------------------------------------------------------------------
     # Find price amounts using regex (Rs. 999, Rs. 1,299, ₹999, INR 999)
-    price_pattern = re.compile(r'(?:Rs\.?|INR|₹)\s*([\d,]+)', re.IGNORECASE)
+    price_pattern = re.compile(r'(?:Rs\.?|INR|₹)\s*(\d+(?:,\d+)*)', re.IGNORECASE)
     draft_matches = list(price_pattern.finditer(body_text))
 
-    # Compare to approved facts (such as F-12: Festive cookware offer Rs. 1,299)
-    f12_item = next((item for item in facts if item.get("item_id") == "F-12"), None)
-    if f12_item:
-        fact_price_match = price_pattern.search(f12_item.get("text", ""))
+    for fact in facts:
+        fact_price_match = price_pattern.search(fact.get("text", ""))
         if fact_price_match:
-            approved_amount_str = fact_price_match.group(1).replace(",", "")
+            approved_amount_str = fact_price_match.group(1).rstrip(",.").replace(",", "")
+            approved_full_str = fact_price_match.group(0).rstrip(",.")
+            fact_cid = fact.get("item_id", "F-12")
             for m in draft_matches:
-                draft_amount_str = m.group(1).replace(",", "")
+                draft_amount_str = m.group(1).rstrip(",.").replace(",", "")
+                draft_matched_str = m.group(0).rstrip(",.")
                 if draft_amount_str != approved_amount_str:
                     raw_findings.append({
                         "lane": "contradiction",
                         "severity": "high",
-                        "citation_id": "F-12",
-                        "explanation": f"Draft price '{m.group(0)}' contradicts approved promotional fact F-12 ('Rs. 1,299').",
-                        "suggested_fix": "Rs. 1,299"
+                        "citation_id": fact_cid,
+                        "explanation": f"Draft price '{draft_matched_str}' contradicts approved promotional fact {fact_cid} ('{approved_full_str}').",
+                        "suggested_fix": approved_full_str
                     })
 
     # --------------------------------------------------------------------------
-    # 2. Superlative & Performance Claims Check (Cited R-04)
+    # 2. Superlative & Performance Claims Check (Cited R-04 / R-15)
     # --------------------------------------------------------------------------
     # Rule R-04: Rank and performance superlatives require an approved evidence record.
     # Seeded vault has NO approved evidence records.
@@ -133,6 +134,29 @@ def run_deterministic_review(
                         "suggested_fix": suggested
                     })
 
+    # Rule R-15: Battery life and latency claims require verified lab test benchmarks.
+    r15_rule = next((item for item in rules if item.get("item_id") == "R-15"), None)
+    if r15_rule:
+        b_triggers = [
+            "battery life",
+            "80-hour",
+            "latency",
+            "ultra-low latency"
+        ]
+        for trigger in b_triggers:
+            if re.search(r'\b' + re.escape(trigger) + r'\b', body_text, re.IGNORECASE):
+                has_evidence = any(
+                    item.get("kind") == "fact" and trigger.lower() in item.get("text", "").lower()
+                    for item in facts
+                )
+                if not has_evidence:
+                    raw_findings.append({
+                        "lane": "evidence_needed",
+                        "severity": "high",
+                        "citation_id": "R-15",
+                        "explanation": f"Claim '{trigger}' requires verified lab test benchmarks under rule R-15. The vault currently has no approved lab benchmarks.",
+                        "suggested_fix": "verified battery performance"
+                    })
 
     # --------------------------------------------------------------------------
     # 3. Terminology Check
@@ -143,16 +167,17 @@ def run_deterministic_review(
         item_id = term_item.get("item_id")
         if "Restricted Term:" in title:
             bad_term = title.split("Restricted Term:")[-1].strip()
-            # Only flag if not already covered by R-04 claim check
+            # Only flag if not already covered by R-04 or R-15 claim check
             if bad_term and re.search(r'\b' + re.escape(bad_term) + r'\b', body_text, re.IGNORECASE):
-                already_covered = any(f.get("citation_id") == "R-04" and bad_term.lower() in f.get("explanation", "").lower() for f in raw_findings)
+                already_covered = any(f.get("citation_id") in ("R-04", "R-15") and bad_term.lower() in f.get("explanation", "").lower() for f in raw_findings)
                 if not already_covered:
+                    suggested = "certified audio" if "audio" in bad_term.lower() else ("certified quality" if "clinically" in bad_term.lower() else "trusted cookware brand")
                     raw_findings.append({
                         "lane": "contradiction",
                         "severity": "medium",
                         "citation_id": item_id,
                         "explanation": f"Term '{bad_term}' is restricted under vault item {item_id}.",
-                        "suggested_fix": "certified quality" if "clinically" in bad_term.lower() else "trusted cookware brand"
+                        "suggested_fix": suggested
                     })
 
     # --------------------------------------------------------------------------
@@ -247,9 +272,9 @@ def apply_fix_to_text(body_text: str, finding: Dict[str, Any]) -> str:
     citation_id = finding.get("citation_id")
     explanation = finding.get("explanation", "")
 
-    # 1. Price fix: F-12
-    if citation_id == "F-12" or "Rs." in suggested_fix:
-        price_re = re.compile(r'(?:Rs\.?|INR|₹)\s*[\d,]+', re.IGNORECASE)
+    # 1. Price fix: F-12, F-20, or general currency
+    if citation_id in ("F-12", "F-20") or "Rs." in suggested_fix or "₹" in suggested_fix or "INR" in suggested_fix:
+        price_re = re.compile(r'(?:Rs\.?|INR|₹)\s*\d+(?:,\d+)*', re.IGNORECASE)
         if price_re.search(body_text):
             return price_re.sub(suggested_fix, body_text, count=1)
 

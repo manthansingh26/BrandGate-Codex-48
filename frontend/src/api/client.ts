@@ -164,8 +164,23 @@ class ApiClient {
 
   // Brands
   async getBrands(): Promise<Brand[]> {
-    const res = await fetch(`${this.base}/api/brands`);
+    const res = await fetch(`${this.base}/api/brands`, {
+      headers: this.getHeaders(),
+    });
     if (!res.ok) throw new Error('Failed to fetch brands');
+    return res.json();
+  }
+
+  async createBrand(name: string): Promise<Brand> {
+    const res = await fetch(`${this.base}/api/brands`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || 'Failed to create brand');
+    }
     return res.json();
   }
 
@@ -235,6 +250,13 @@ class ApiClient {
       const errorData = await res.json().catch(() => ({}));
       throw new Error(errorData.detail || 'Failed to create draft');
     }
+    return res.json();
+  }
+
+  async listDrafts(brandId?: string): Promise<Draft[]> {
+    const url = brandId ? `${this.base}/api/drafts?brand_id=${brandId}` : `${this.base}/api/drafts`;
+    const res = await fetch(url, { headers: this.getHeaders() });
+    if (!res.ok) throw new Error('Failed to fetch drafts');
     return res.json();
   }
 

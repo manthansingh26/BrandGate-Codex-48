@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { ApiConnectionStatus, UserRole } from '../types';
+import { ApiConnectionStatus, UserRole, Brand } from '../types';
 import { AuthModal } from './AuthModal';
 import { BrandGateLogo } from './BrandGateLogo';
+import { BrandSwitcher } from './BrandSwitcher';
 import { AlertCircle, RefreshCw, LogIn, LogOut, User, Menu, X } from 'lucide-react';
 
 interface NavbarProps {
@@ -14,6 +15,9 @@ interface NavbarProps {
   onSignOut: () => void;
   onRefreshHealth: () => void;
   wakingElapsed?: number;
+  availableBrands?: Brand[];
+  activeBrand?: Brand | null;
+  onSelectBrand?: (brand: Brand) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -26,6 +30,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSignOut,
   onRefreshHealth,
   wakingElapsed,
+  availableBrands,
+  activeBrand,
+  onSelectBrand,
 }) => {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -35,11 +42,20 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Honesty Banner */}
       <div className="bg-zinc-950 border-b border-zinc-900 px-4 py-1.5 text-xs text-zinc-400 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-teal-400 font-medium">
-            Seeded demo brand
-          </span>
+          {availableBrands && availableBrands.length > 0 && onSelectBrand ? (
+            <BrandSwitcher
+              availableBrands={availableBrands}
+              activeBrand={activeBrand || null}
+              onSelectBrand={onSelectBrand}
+              variant="compact"
+            />
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-teal-400 font-medium">
+              {activeBrand?.name || 'Seeded demo brand'}
+            </span>
+          )}
           <span className="hidden sm:inline text-zinc-500">
-            {currentUserEmail ? `Account: ${currentUserEmail}` : 'Guest demo — data is shared demo data'}
+            {currentUserEmail ? `Account: ${currentUserEmail}` : 'Multi-brand workspace demo'}
           </span>
         </div>
         <div className="flex items-center gap-2 text-zinc-400">

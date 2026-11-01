@@ -104,5 +104,16 @@ class ReviewDraftRequest(BaseModel):
     palette_off: bool = Field(False, description="Client-side canvas sampling detected off-palette colors")
     contrast_ratio: Optional[float] = Field(None, description="Calculated WCAG text contrast ratio")
 
+class BrandCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100, description="Brand workspace name")
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("Brand name cannot be empty")
+        return value.strip()
+
+
 
 

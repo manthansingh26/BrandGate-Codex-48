@@ -1,13 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { Brand, InsightsData, VaultItem } from '../types';
 import { api } from '../api/client';
+import { BrandSwitcher } from '../components/BrandSwitcher';
 import { BarChart3, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
 
 interface InsightsProps {
   activeBrand: Brand | null;
+  availableBrands?: Brand[];
+  onSelectBrand?: (brand: Brand) => void;
 }
 
-export const Insights: React.FC<InsightsProps> = ({ activeBrand }) => {
+export const Insights: React.FC<InsightsProps> = ({
+  activeBrand,
+  availableBrands,
+  onSelectBrand,
+}) => {
   const [data, setData] = useState<InsightsData | null>(null);
   const [vaultMap, setVaultMap] = useState<Record<string, VaultItem>>({});
   const [loading, setLoading] = useState(true);
@@ -47,31 +54,21 @@ export const Insights: React.FC<InsightsProps> = ({ activeBrand }) => {
     fetchInsights();
   }, [activeBrand?.id]);
 
-  const baseCitations = [
-    { id: 'F-12', fallbackLabel: 'Festive Price Offer (F-12)', fallbackType: 'Fact' },
-    { id: 'R-04', fallbackLabel: 'Superlatives & Claims Evidence (R-04)', fallbackType: 'Rule' },
-    { id: 'A-02', fallbackLabel: 'Approved Logo Check (A-02)', fallbackType: 'Rule' },
-    { id: 'R-09', fallbackLabel: 'Descriptive Alt Text (R-09)', fallbackType: 'Rule' },
-    { id: 'P-01', fallbackLabel: 'Primary Brand Blue (P-01)', fallbackType: 'Palette' },
-    { id: 'P-02', fallbackLabel: 'Secondary Accent Amber (P-02)', fallbackType: 'Palette' },
-    { id: 'P-03', fallbackLabel: 'Surface Neutral Light (P-03)', fallbackType: 'Palette' },
-    { id: 'P-04', fallbackLabel: 'Text Slate Dark (P-04)', fallbackType: 'Palette' },
-    { id: 'T-01', fallbackLabel: 'Restricted Term: clinically proven (T-01)', fallbackType: 'Terminology' },
-    { id: 'T-02', fallbackLabel: "Restricted Term: India's No. 1 (T-02)", fallbackType: 'Terminology' },
-    { id: 'T-03', fallbackLabel: 'Approved Term: certified quality (T-03)', fallbackType: 'Terminology' },
-    { id: 'T-04', fallbackLabel: 'Approved Term: trusted cookware brand (T-04)', fallbackType: 'Terminology' },
-  ];
+  // Dynamically derive citation list from active brand's actual vault items and database session counts
+  const citationKeys = Object.keys(data?.counts_by_citation || {});
+  const fallbackKeys = Object.keys(vaultMap);
+  const effectiveKeys = citationKeys.length > 0 ? citationKeys : fallbackKeys;
 
-  const canonicalCitations = baseCitations.map((item) => {
-    const liveItem = vaultMap[item.id];
+  const canonicalCitations = effectiveKeys.map((cid) => {
+    const liveItem = vaultMap[cid];
     if (liveItem) {
       const typeStr = liveItem.kind
         ? liveItem.kind.charAt(0).toUpperCase() + liveItem.kind.slice(1)
-        : item.fallbackType;
-      const label = liveItem.title.includes(`(${item.id})`) ? liveItem.title : `${liveItem.title} (${item.id})`;
-      return { id: item.id, label, type: typeStr };
+        : 'Rule';
+      const label = liveItem.title.includes(`(${cid})`) ? liveItem.title : `${liveItem.title} (${cid})`;
+      return { id: cid, label, type: typeStr };
     }
-    return { id: item.id, label: item.fallbackLabel, type: item.fallbackType };
+    return { id: cid, label: `Vault Item (${cid})`, type: 'Rule' };
   });
 
   return (
@@ -97,14 +94,25 @@ export const Insights: React.FC<InsightsProps> = ({ activeBrand }) => {
           </p>
         </div>
 
-        <button
-          onClick={fetchInsights}
-          disabled={loading}
-          className="btn-secondary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700 text-xs font-semibold disabled:opacity-50"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          {loading ? 'Loading...' : 'Refresh Counts'}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          {availableBrands && availableBrands.length > 0 && onSelectBrand && (
+            <BrandSwitcher
+              availableBrands={availableBrands}
+              activeBrand={activeBrand}
+              onSelectBrand={onSelectBrand}
+              variant="compact"
+            />
+          )}
+
+          <button
+            onClick={fetchInsights}
+            disabled={loading}
+            className="btn-secondary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-700 text-xs font-semibold disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Loading...' : 'Refresh Counts'}
+          </button>
+        </div>
       </div>
 
       {/* Honesty Disclosure Banner */}

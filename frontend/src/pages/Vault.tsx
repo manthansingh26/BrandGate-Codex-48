@@ -1,14 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { Brand, GroupedVault, VaultItem } from '../types';
 import { api } from '../api/client';
+import { BrandSwitcher } from '../components/BrandSwitcher';
 import { Plus, RefreshCw, Trash2, Edit2, Check, X, Palette, BookOpen, Search, Copy, CheckCircle2, Info } from 'lucide-react';
 
 interface VaultProps {
   activeBrand: Brand | null;
   currentUserEmail?: string | null;
+  availableBrands?: Brand[];
+  onSelectBrand?: (brand: Brand) => void;
 }
 
-export const Vault: React.FC<VaultProps> = ({ activeBrand, currentUserEmail }) => {
+export const Vault: React.FC<VaultProps> = ({
+  activeBrand,
+  currentUserEmail,
+  availableBrands,
+  onSelectBrand,
+}) => {
   const isGuest = !currentUserEmail;
   const [vault, setVault] = useState<GroupedVault>({ fact: [], rule: [], terminology: [], palette: [] });
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -153,30 +161,41 @@ export const Vault: React.FC<VaultProps> = ({ activeBrand, currentUserEmail }) =
           </p>
         </div>
 
-        {isGuest ? (
-          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-900/80 border border-zinc-800 text-xs text-zinc-400">
-            <Info className="h-4 w-4 text-teal-400 flex-shrink-0" />
-            <span>Guest demo: vault is read-only. Sign in to manage a brand vault.</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsAdding(!isAdding)}
-              className="btn-primary-micro inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-sm shadow-md shadow-teal-500/20"
-            >
-              <Plus className="h-4 w-4" />
-              Add Item
-            </button>
-            <button
-              onClick={handleResetDemo}
-              disabled={resetting}
-              className="btn-secondary-micro inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-sm font-semibold disabled:opacity-50"
-            >
-              <RefreshCw className={`h-4 w-4 ${resetting ? 'animate-spin' : ''}`} />
-              Reset Demo Vault
-            </button>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          {availableBrands && availableBrands.length > 0 && onSelectBrand && (
+            <BrandSwitcher
+              availableBrands={availableBrands}
+              activeBrand={activeBrand}
+              onSelectBrand={onSelectBrand}
+              variant="compact"
+            />
+          )}
+
+          {isGuest ? (
+            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-900/80 border border-zinc-800 text-xs text-zinc-400">
+              <Info className="h-4 w-4 text-teal-400 flex-shrink-0" />
+              <span>Guest demo: vault is read-only.</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setIsAdding(!isAdding)}
+                className="btn-primary-micro inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-sm shadow-md shadow-teal-500/20"
+              >
+                <Plus className="h-4 w-4" />
+                Add Item
+              </button>
+              <button
+                onClick={handleResetDemo}
+                disabled={resetting}
+                className="btn-secondary-micro inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-sm font-semibold disabled:opacity-50"
+              >
+                <RefreshCw className={`h-4 w-4 ${resetting ? 'animate-spin' : ''}`} />
+                Reset Demo Vault
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {error && (
