@@ -1,6 +1,7 @@
 import urllib.request
 import json
 import sys
+import time
 
 BASE_URL = "http://localhost:8000"
 
@@ -10,7 +11,7 @@ def run_judge_path():
     print("=" * 60)
 
     # Step 1: Demo draft initialized
-    demo_draft_id = "local-draft-judge-20261101"
+    demo_draft_id = f"local-draft-judge-{int(time.time())}"
     print(f"1. Initialized guest demo draft with ID: {demo_draft_id}")
 
     # Step 2: Review Draft

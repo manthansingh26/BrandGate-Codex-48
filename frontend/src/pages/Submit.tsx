@@ -1,26 +1,54 @@
-import React, { useState } from 'react';
-import { Draft, Finding, ApiConnectionStatus } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Draft, Finding, ApiConnectionStatus, Brand } from '../types';
 import { api } from '../api/client';
 import { supabase } from '../supabase';
 import { runLocalDemoReview } from '../utils/localReviewEngine';
 import { sampleImageColors, calculateContrastRatio, ContrastResult } from '../utils/imageAnalysis';
+import { BrandSwitcher } from '../components/BrandSwitcher';
 import { ShieldCheck, AlertCircle, RefreshCw, CheckCircle2, Image as ImageIcon, Eye } from 'lucide-react';
+
+const BRAND_B_ID = '00000000-0000-0000-0000-000000000002';
 
 interface SubmitProps {
   currentDraft: Draft | null;
   onReviewCompleted: (draft: Draft, findings: Finding[], llmReview?: any) => void;
   apiStatus: ApiConnectionStatus;
+  activeBrand?: Brand | null;
+  availableBrands?: Brand[];
+  onSelectBrand?: (brand: Brand) => void;
 }
 
+export const Submit: React.FC<SubmitProps> = ({
+  currentDraft,
+  onReviewCompleted,
+  apiStatus,
+  activeBrand,
+  availableBrands,
+  onSelectBrand,
+}) => {
+  const isBrandB = activeBrand?.id === BRAND_B_ID;
+  const isDraftForActiveBrand = Boolean(currentDraft && currentDraft.brand_id === activeBrand?.id);
 
-export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted, apiStatus }) => {
-  const [title, setTitle] = useState(currentDraft?.title || 'Creative Draft');
-  const [bodyText, setBodyText] = useState(
-    currentDraft?.body_text ||
-      "Diwali Dhamaka! India's No. 1 cookware brand — clinically proven non-stick — now for just Rs. 999!"
-  );
-  const [altText, setAltText] = useState(currentDraft?.alt_text || '');
-  const [imagePreview, setImagePreview] = useState<string | null>(currentDraft?.image_url || null);
+  const getInitialTitle = () => {
+    if (isBrandB) {
+      return isDraftForActiveBrand ? currentDraft?.title || '' : '';
+    }
+    return isDraftForActiveBrand ? (currentDraft?.title || 'Creative Draft') : 'Creative Draft';
+  };
+
+  const getInitialBody = () => {
+    if (isBrandB) {
+      return isDraftForActiveBrand ? currentDraft?.body_text || '' : '';
+    }
+    return isDraftForActiveBrand
+      ? (currentDraft?.body_text || "Diwali Dhamaka! India's No. 1 cookware brand — clinically proven non-stick — now for just Rs. 999!")
+      : "Diwali Dhamaka! India's No. 1 cookware brand — clinically proven non-stick — now for just Rs. 999!";
+  };
+
+  const [title, setTitle] = useState(getInitialTitle);
+  const [bodyText, setBodyText] = useState(getInitialBody);
+  const [altText, setAltText] = useState(() => (isDraftForActiveBrand ? currentDraft?.alt_text || '' : ''));
+  const [imagePreview, setImagePreview] = useState<string | null>(() => (isDraftForActiveBrand ? currentDraft?.image_url || null : null));
   const [logoConfirmed, setLogoConfirmed] = useState(false);
   const [sampledColors, setSampledColors] = useState<string[]>([]);
   const [isOffPalette, setIsOffPalette] = useState(false);
@@ -28,6 +56,19 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
   const [reviewing, setReviewing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Synchronize and completely reset form state when active brand or draft changes
+  useEffect(() => {
+    setTitle(getInitialTitle());
+    setBodyText(getInitialBody());
+    setAltText(isDraftForActiveBrand ? currentDraft?.alt_text || '' : '');
+    setImagePreview(isDraftForActiveBrand ? currentDraft?.image_url || null : null);
+    setLogoConfirmed(false);
+    setSampledColors([]);
+    setIsOffPalette(false);
+    setContrastResult(null);
+    setError(null);
+  }, [activeBrand?.id, currentDraft?.id]);
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -106,14 +147,18 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
         // Do not persist temporary local blob: URLs as durable public assets on server
         const durableImageUrl = imagePreview && !imagePreview.startsWith('blob:') ? imagePreview : null;
 
+        const targetBrandId = activeBrand?.id || '00000000-0000-0000-0000-000000000001';
+        const defaultFallbackTitle = isBrandB ? 'NovaTech ANC 500 Launch Campaign' : 'Diwali Festive Cookware Campaign';
+
         // If draft hasn't been created yet, create it
         if (!draftId) {
           const created = await api.createDraft({
-            brand_id: '00000000-0000-0000-0000-000000000001',
-            title,
+            brand_id: targetBrandId,
+            title: title || defaultFallbackTitle,
             body_text: bodyText,
             alt_text: altText || null,
             image_url: durableImageUrl,
+            created_by_role: 'guest',
           });
           draftId = created.id;
         } else if (
@@ -153,11 +198,13 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
         onReviewCompleted(updatedDraft, reviewRes.findings, reviewRes.llm_review);
       } else {
         // Local demo mode review (when API offline)
+        const targetBrandId = activeBrand?.id || '00000000-0000-0000-0000-000000000001';
+        const defaultFallbackTitle = isBrandB ? 'NovaTech ANC 500 Launch Campaign' : 'Diwali Festive Cookware Campaign';
         const localFindings = runLocalDemoReview(bodyText, altText, imagePreview);
         const localDraft: Draft = {
           id: draftId || `local-${Date.now()}`,
-          brand_id: '00000000-0000-0000-0000-000000000001',
-          title,
+          brand_id: targetBrandId,
+          title: title || defaultFallbackTitle,
           body_text: bodyText,
           alt_text: altText,
           image_url: imagePreview,
@@ -185,14 +232,25 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-10">
-      <div className="mb-8">
-        <h1 className="text-3xl font-extrabold text-white flex items-center gap-3">
-          <ShieldCheck className="h-8 w-8 text-teal-400" />
-          Submit Creative for Review
-        </h1>
-        <p className="text-zinc-400 text-sm mt-1">
-          Validate ad copy, promotions, and creative assets against brand vault rules prior to publication.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-3xl font-extrabold text-white flex items-center gap-3">
+            <ShieldCheck className="h-8 w-8 text-teal-400" />
+            Submit Creative for Review
+          </h1>
+          <p className="text-zinc-400 text-sm mt-1">
+            Validate ad copy, promotions, and creative assets against brand vault rules prior to publication.
+          </p>
+        </div>
+
+        {availableBrands && availableBrands.length > 0 && onSelectBrand && (
+          <BrandSwitcher
+            availableBrands={availableBrands}
+            activeBrand={activeBrand || null}
+            onSelectBrand={onSelectBrand}
+            variant="compact"
+          />
+        )}
       </div>
 
       {/* API Status Banner */}
@@ -261,7 +319,7 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="w-full px-4 py-3 bg-black/60 border border-zinc-800 rounded-xl text-white text-sm focus:border-teal-500 focus:outline-none transition-colors"
-            placeholder="e.g. Diwali Cookware Festive Promotion"
+            placeholder={isBrandB ? "e.g. NovaTech ANC 500 Launch Campaign" : "e.g. Diwali Cookware Festive Promotion"}
           />
         </div>
 
@@ -275,14 +333,22 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
               <span>•</span>
               <span>{bodyText.length} chars</span>
               <span>•</span>
-              <span className="text-teal-400">Rules active: R-04 superlatives</span>
+              {isBrandB ? (
+                <span className="text-teal-400 font-medium">Rules active: F-20 pricing • R-15 lab benchmarks • T-10 terminology</span>
+              ) : (
+                <span className="text-teal-400">Rules active: R-04 superlatives</span>
+              )}
             </div>
           </div>
           <textarea
             value={bodyText}
             onChange={(e) => setBodyText(e.target.value)}
             className="w-full p-4 bg-black/60 border border-zinc-800 rounded-xl text-white text-sm focus:border-teal-500 focus:outline-none h-36 leading-relaxed font-sans transition-colors"
-            placeholder="Enter advertising, promotional, or social post copy..."
+            placeholder={
+              isBrandB
+                ? "Enter NovaTech audio advertising, promotional specs, or launch copy (enforces F-20, R-15, T-10)..."
+                : "Enter advertising, promotional, or social post copy..."
+            }
           />
         </div>
 
@@ -381,37 +447,56 @@ export const Submit: React.FC<SubmitProps> = ({ currentDraft, onReviewCompleted,
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300">
-                  Image Alt Text <span className="text-zinc-500 font-normal font-mono">(Rule R-09)</span>
+                  Image Alt Text {!isBrandB && <span className="text-zinc-500 font-normal font-mono">(Rule R-09)</span>}
                 </label>
-                <span className="text-[11px] text-zinc-500 font-mono">Accessibility mandatory</span>
+                <span className="text-[11px] text-zinc-500 font-mono">
+                  {isBrandB ? 'Accessibility standard' : 'Accessibility mandatory'}
+                </span>
               </div>
               <textarea
                 value={altText}
                 onChange={(e) => setAltText(e.target.value)}
-                placeholder="Descriptive text for accessibility. Rule R-09 requires descriptive alt text when an image is present..."
+                placeholder={
+                  isBrandB
+                    ? "Descriptive text for accessibility image asset..."
+                    : "Descriptive text for accessibility. Rule R-09 requires descriptive alt text when an image is present..."
+                }
                 className="w-full p-3 bg-black/60 border border-zinc-800 rounded-xl text-white text-xs focus:border-teal-500 focus:outline-none h-24 leading-relaxed font-sans transition-colors"
               />
             </div>
 
-            {/* Logo Check Reviewer Confirmation Checkbox (A-02) */}
-            <div className="p-4 rounded-xl bg-black/40 border border-zinc-800 space-y-1">
-              <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={logoConfirmed}
-                  onChange={(e) => setLogoConfirmed(e.target.checked)}
-                  className="mt-0.5 rounded border-zinc-700 text-teal-400 focus:ring-0"
-                />
-                <div>
-                  <span className="text-xs font-bold text-white block">
-                    Confirm approved current logo file (Rule A-02)
-                  </span>
-                  <p className="text-[11px] text-zinc-400 leading-normal mt-0.5">
-                    Archived logos are rejected. Logo checking is reviewer-confirmed only — automatic logo verification is never claimed.
-                  </p>
+            {!isBrandB ? (
+              /* Logo Check Reviewer Confirmation Checkbox (A-02) */
+              <div className="p-4 rounded-xl bg-black/40 border border-zinc-800 space-y-1">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={logoConfirmed}
+                    onChange={(e) => setLogoConfirmed(e.target.checked)}
+                    className="mt-0.5 rounded border-zinc-700 text-teal-400 focus:ring-0"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-white block">
+                      Confirm approved current logo file (Rule A-02)
+                    </span>
+                    <p className="text-[11px] text-zinc-400 leading-normal mt-0.5">
+                      Archived logos are rejected. Logo checking is reviewer-confirmed only — automatic logo verification is never claimed.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            ) : (
+              /* NovaTech Brand B Visual Palette Rules (P-10 & P-11) */
+              <div className="p-4 rounded-xl bg-black/40 border border-zinc-800 space-y-1.5">
+                <div className="text-xs font-bold text-white flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400/50"></span>
+                  NovaTech Approved Palette (Rules P-10 & P-11)
                 </div>
-              </label>
-            </div>
+                <p className="text-[11px] text-zinc-400 leading-normal">
+                  Visual checks enforce Cyan Accent (<span className="text-cyan-400 font-mono">#06B6D4</span>) and Obsidian Deep (<span className="text-zinc-300 font-mono">#0B0F19</span>) with WCAG 2.1 contrast ratio verification.
+                </p>
+              </div>
+            )}
 
             {/* WCAG Contrast Ratio Checker Tool */}
             <div className="p-4 rounded-xl bg-black/40 border border-zinc-800 space-y-3">

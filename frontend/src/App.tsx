@@ -126,7 +126,14 @@ export const App: React.FC = () => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('brandgate_active_draft') || sessionStorage.getItem('brandgate_active_draft');
-        return saved ? JSON.parse(saved) : null;
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const savedBrandId = localStorage.getItem('brandgate_active_brand_id') || '00000000-0000-0000-0000-000000000001';
+          if (parsed && parsed.brand_id === savedBrandId) {
+            return parsed;
+          }
+        }
+        return null;
       } catch {
         return null;
       }
@@ -444,16 +451,20 @@ export const App: React.FC = () => {
           )}
           {activeTab === 'submit' && (
             <Submit
-              currentDraft={activeDraft}
+              key={`${activeBrand?.id || 'default'}-${activeDraft?.id || 'new'}`}
+              activeBrand={activeBrand}
+              availableBrands={availableBrands}
+              onSelectBrand={handleBrandChange}
+              currentDraft={activeDraft && activeDraft.brand_id === activeBrand?.id ? activeDraft : null}
               onReviewCompleted={handleReviewCompleted}
               apiStatus={apiStatus}
             />
           )}
           {activeTab === 'report' && (
             <Report
-              draft={activeDraft}
-              findings={draftFindings}
-              llmReview={llmReviewResult}
+              draft={activeDraft && activeDraft.brand_id === activeBrand?.id ? activeDraft : null}
+              findings={activeDraft && activeDraft.brand_id === activeBrand?.id ? draftFindings : []}
+              llmReview={activeDraft && activeDraft.brand_id === activeBrand?.id ? llmReviewResult : null}
               onDraftUpdated={handleDraftUpdated}
               onNavigateToReview={() => navigateToTab('review')}
               onNavigateToSubmit={() => navigateToTab('submit')}
@@ -463,8 +474,8 @@ export const App: React.FC = () => {
           )}
           {activeTab === 'review' && (
             <Review
-              draft={activeDraft}
-              findings={draftFindings}
+              draft={activeDraft && activeDraft.brand_id === activeBrand?.id ? activeDraft : null}
+              findings={activeDraft && activeDraft.brand_id === activeBrand?.id ? draftFindings : []}
               userRole={userRole}
               onDraftUpdated={handleDraftUpdated}
               onRoleChange={handleRoleChange}
@@ -476,6 +487,7 @@ export const App: React.FC = () => {
           )}
           {activeTab === 'insights' && (
             <Insights
+              key={activeBrand?.id}
               activeBrand={activeBrand}
               availableBrands={availableBrands}
               onSelectBrand={handleBrandChange}

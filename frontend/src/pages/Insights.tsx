@@ -21,6 +21,8 @@ export const Insights: React.FC<InsightsProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const fetchInsights = async () => {
+    setData(null);
+    setVaultMap({});
     setLoading(true);
     setError(null);
     try {
@@ -206,10 +208,10 @@ export const Insights: React.FC<InsightsProps> = ({
         </div>
 
         <div className="space-y-3">
-          {!data && loading ? (
+          {loading || !data ? (
             <div className="p-8 text-center text-zinc-500 flex items-center justify-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-teal-400" />
-              <span className="text-xs font-mono">Loading citation occurrences...</span>
+              <span className="text-xs font-mono">Loading citation occurrences for {activeBrand?.name || 'brand'}...</span>
             </div>
           ) : (
             canonicalCitations.map((item) => {
