@@ -572,7 +572,7 @@ interface FindingCardProps {
 const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applyingFixId, applyFixElapsed }) => {
   const isApplying = applyingFixId === finding.id;
   const pageMatch = finding.explanation.match(/\[Page\s+(\d+)\]/i) || finding.explanation.match(/\bPage\s+(\d+)\b/i);
-  const pageNumber = finding.page || (pageMatch ? parseInt(pageMatch[1], 10) : undefined);
+  const pageNumber = (finding.page !== undefined && finding.page !== null) ? finding.page : (pageMatch ? parseInt(pageMatch[1], 10) : undefined);
   const cleanExplanation = finding.explanation.replace(/\[Page\s+\d+\]\s*/gi, '').trim();
 
   const severityColor = {
@@ -588,7 +588,7 @@ const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applying
           <span className="px-2.5 py-0.5 rounded-md text-xs font-mono font-bold bg-teal-500/10 text-teal-300 border border-teal-500/20">
             {finding.citation_id}
           </span>
-          {pageNumber && (
+          {pageNumber !== undefined && pageNumber !== null && (
             <span className="px-2.5 py-0.5 rounded-md text-[10px] font-mono font-black bg-teal-500/25 text-teal-200 border border-teal-500/50 shadow-sm shadow-teal-500/20">
               Page {pageNumber}
             </span>

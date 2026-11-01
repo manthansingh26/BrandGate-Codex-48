@@ -265,10 +265,28 @@ class ApiClient {
       headers: this.getHeaders(),
     });
     if (!res.ok) throw new Error('Failed to fetch draft');
-    return res.json();
+    const data: Draft = await res.json();
+    if (data.findings && Array.isArray(data.findings)) {
+      data.findings.forEach((f: Finding) => {
+        if (f.page === undefined || f.page === null) {
+          const m = f.explanation?.match(/\[Page\s+(\d+)\]/i);
+          if (m) f.page = parseInt(m[1], 10);
+        }
+      });
+    }
+    return data;
   }
 
-  async reviewDraft(draftId: string, options?: { logo_confirmed?: boolean; palette_off?: boolean; contrast_ratio?: number; palette_unsampleable?: boolean }): Promise<{
+  async reviewDraft(
+    draftId: string,
+    options?: {
+      logo_confirmed?: boolean;
+      palette_off?: boolean;
+      contrast_ratio?: number;
+      palette_unsampleable?: boolean;
+      pages?: any[];
+    }
+  ): Promise<{
     findings: Finding[];
     llm_review?: any;
   }> {
@@ -282,12 +300,18 @@ class ApiClient {
       throw new Error(errorData.detail || 'Failed to review draft');
     }
     const data = await res.json();
-    if (Array.isArray(data)) {
-      return { findings: data };
-    }
+    const rawList: Finding[] = Array.isArray(data)
+      ? data
+      : (data.findings || data.deterministic_findings || []);
+    rawList.forEach((f) => {
+      if (f.page === undefined || f.page === null) {
+        const m = f.explanation?.match(/\[Page\s+(\d+)\]/i);
+        if (m) f.page = parseInt(m[1], 10);
+      }
+    });
     return {
-      findings: data.findings || data.deterministic_findings || [],
-      llm_review: data.llm_review,
+      findings: rawList,
+      llm_review: Array.isArray(data) ? undefined : data.llm_review,
     };
   }
 
@@ -427,7 +451,7 @@ class ApiClient {
   async uploadDraftDocument(
     file: File,
     brandId: string,
-    options?: { title?: string; altText?: string; logoConfirmed?: boolean }
+    options?: { title?: string; altText?: string; logoConfirmed?: boolean; bodyText?: string }
   ): Promise<any> {
     const formData = new FormData();
     formData.append('file', file);
@@ -435,6 +459,7 @@ class ApiClient {
     if (options?.title) formData.append('title', options.title);
     if (options?.altText) formData.append('alt_text', options.altText);
     if (options?.logoConfirmed) formData.append('logo_confirmed', 'true');
+    if (options?.bodyText) formData.append('body_text', options.bodyText);
 
     const res = await fetch(`${this.base}/api/drafts/upload`, {
       method: 'POST',
@@ -444,7 +469,23 @@ class ApiClient {
       const errorData = await res.json().catch(() => ({}));
       throw new Error(errorData.detail || 'Failed to upload document draft');
     }
-    return res.json();
+    const data = await res.json();
+    const findingsList: Finding[] = data.findings || data.deterministic_findings || [];
+    findingsList.forEach((f) => {
+      if (f.page === undefined || f.page === null) {
+        const m = f.explanation?.match(/\[Page\s+(\d+)\]/i);
+        if (m) f.page = parseInt(m[1], 10);
+      }
+    });
+    if (data.draft?.findings) {
+      data.draft.findings.forEach((f: Finding) => {
+        if (f.page === undefined || f.page === null) {
+          const m = f.explanation?.match(/\[Page\s+(\d+)\]/i);
+          if (m) f.page = parseInt(m[1], 10);
+        }
+      });
+    }
+    return data;
   }
 }
 

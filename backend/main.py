@@ -1,6 +1,8 @@
 import os
 import re
 import uuid
+import json
+import tempfile
 import logging
 import concurrent.futures
 from typing import Dict, Any, List, Optional
@@ -25,7 +27,7 @@ from models import (
     ReviewDraftRequest,
     BrandCreate,
 )
-from review_engine import run_deterministic_review, apply_fix_to_text
+from review_engine import run_deterministic_review, apply_fix_to_text, _tag_page
 from llm_review import run_grounded_llm_review
 from document_parser import parse_document, MAX_FILE_SIZE_BYTES
 
@@ -54,6 +56,35 @@ _LLM_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 _DRAFT_LAST_LLM_REVIEW: Dict[str, Dict[str, Any]] = {}
 _DRAFT_PAGES: Dict[str, List[Dict[str, Any]]] = {}
 _DRAFT_DOC_META: Dict[str, Dict[str, Any]] = {}
+
+def _save_cached_pages(draft_id: str, pages: List[Dict[str, Any]]):
+    if not draft_id or not pages:
+        return
+    s_id = str(draft_id)
+    _DRAFT_PAGES[s_id] = pages
+    try:
+        cache_path = os.path.join(tempfile.gettempdir(), f"bg_pages_{s_id}.json")
+        with open(cache_path, "w") as f:
+            json.dump(pages, f)
+    except Exception:
+        pass
+
+def _get_cached_pages(draft_id: str) -> Optional[List[Dict[str, Any]]]:
+    if not draft_id:
+        return None
+    s_id = str(draft_id)
+    if s_id in _DRAFT_PAGES:
+        return _DRAFT_PAGES[s_id]
+    try:
+        cache_path = os.path.join(tempfile.gettempdir(), f"bg_pages_{s_id}.json")
+        if os.path.exists(cache_path):
+            with open(cache_path, "r") as f:
+                pages = json.load(f)
+                _DRAFT_PAGES[s_id] = pages
+                return pages
+    except Exception:
+        pass
+    return None
 
 app = FastAPI(
     title="BrandGate API",
@@ -734,6 +765,7 @@ async def upload_draft_document(
     title: Optional[str] = Form(None),
     alt_text: Optional[str] = Form(None),
     logo_confirmed: Optional[bool] = Form(False),
+    body_text: Optional[str] = Form(None),
     request: Request = None
 ):
     auth_header = request.headers.get("Authorization") if request else None
@@ -775,11 +807,12 @@ async def upload_draft_document(
 
     doc_title = title or (file.filename or "Document Draft").rsplit(".", 1)[0]
     creator_role = user["role"] if user else "guest"
+    effective_text = body_text if (body_text and body_text.strip()) else parsed["text"]
 
     draft_record = {
         "brand_id": brand_id,
         "title": doc_title,
-        "body_text": parsed["text"],
+        "body_text": effective_text,
         "image_url": first_image_url,
         "alt_text": alt_text,
         "status": "draft",
@@ -807,13 +840,13 @@ async def upload_draft_document(
     version_record = {
         "draft_id": actual_id,
         "version_no": 1,
-        "body_text": parsed["text"],
+        "body_text": effective_text,
         "alt_text": alt_text
     }
     supabase.table("draft_versions").insert(version_record).execute()
 
     if parsed.get("file_type") == "pdf" and parsed.get("pages"):
-        _DRAFT_PAGES[actual_id] = parsed["pages"]
+        _save_cached_pages(actual_id, parsed["pages"])
 
     _DRAFT_DOC_META[actual_id] = {
         "filename": file.filename,
@@ -829,7 +862,7 @@ async def upload_draft_document(
     contrast_to_pass = parsed.get("contrast_ratio")
     palette_unsampleable = parsed.get("palette_unsampleable", False)
     validated_findings = run_deterministic_review(
-        body_text=parsed["text"],
+        body_text=effective_text,
         alt_text=alt_text,
         image_url=first_image_url,
         active_vault_items=active_vault_items,
@@ -857,12 +890,15 @@ async def upload_draft_document(
         insert_res = supabase.table("findings").insert(findings_to_insert).execute()
         saved_findings = insert_res.data or []
 
+    if not saved_findings and validated_findings:
+        saved_findings = validated_findings
+
     for idx, f in enumerate(saved_findings):
         f["brand_id"] = brand_id
-        if idx < len(validated_findings) and "page" in validated_findings[idx]:
+        if idx < len(validated_findings) and validated_findings[idx].get("page") is not None:
             f["page"] = validated_findings[idx]["page"]
-        elif f.get("explanation", "").startswith("[Page "):
-            page_m = re.match(r"^\[Page\s+(\d+)\]", f.get("explanation", ""))
+        elif f.get("page") is None:
+            page_m = re.search(r"\[Page\s+(\d+)\]", f.get("explanation", ""), re.IGNORECASE)
             if page_m:
                 f["page"] = int(page_m.group(1))
 
@@ -912,10 +948,14 @@ def get_draft(draft_id: str, request: Request = None):
     findings_data = findings_res.data or []
     for f in findings_data:
         f["brand_id"] = draft["brand_id"]
-        if "page" not in f and f.get("explanation", "").startswith("[Page "):
-            page_m = re.match(r"^\[Page\s+(\d+)\]", f.get("explanation", ""))
+        if f.get("page") is None:
+            page_m = re.search(r"\[Page\s+(\d+)\]", f.get("explanation", ""), re.IGNORECASE)
             if page_m:
                 f["page"] = int(page_m.group(1))
+        if f.get("page") is None:
+            cached_pages = _get_cached_pages(actual_id) or _get_cached_pages(draft_id)
+            if cached_pages:
+                _tag_page(f, cached_pages)
 
     draft["versions"] = versions_res.data or []
     draft["findings"] = findings_data
@@ -1015,7 +1055,10 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
     contrast_ratio = payload.contrast_ratio if payload else None
     palette_unsampleable = payload.palette_unsampleable if payload else False
 
-    cached_pages = _DRAFT_PAGES.get(actual_id) or _DRAFT_PAGES.get(draft_id)
+    cached_pages = (payload.pages if payload and payload.pages else None) or _get_cached_pages(actual_id) or _get_cached_pages(draft_id)
+    if payload and payload.pages:
+        _save_cached_pages(actual_id, payload.pages)
+
     doc_meta = _DRAFT_DOC_META.get(actual_id) or _DRAFT_DOC_META.get(draft_id) or {}
     if not palette_off and doc_meta.get("is_off_palette"):
         palette_off = True
@@ -1059,12 +1102,15 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
         insert_res = supabase.table("findings").insert(findings_to_insert).execute()
         saved_findings = insert_res.data or []
 
+    if not saved_findings and validated_findings:
+        saved_findings = validated_findings
+
     for idx, f in enumerate(saved_findings):
         f["brand_id"] = draft["brand_id"]
-        if idx < len(validated_findings) and "page" in validated_findings[idx]:
+        if idx < len(validated_findings) and validated_findings[idx].get("page") is not None:
             f["page"] = validated_findings[idx]["page"]
-        elif f.get("explanation", "").startswith("[Page "):
-            page_m = re.match(r"^\[Page\s+(\d+)\]", f.get("explanation", ""))
+        elif f.get("page") is None:
+            page_m = re.search(r"\[Page\s+(\d+)\]", f.get("explanation", ""), re.IGNORECASE)
             if page_m:
                 f["page"] = int(page_m.group(1))
 
@@ -1250,9 +1296,12 @@ def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID")
     drafts_findings_map = {d["id"]: [] for d in brand_drafts}
 
     if draft_ids:
-        # Fetch findings for these drafts
-        findings_res = supabase.table("findings").select("id, draft_id, citation_id, lane, severity, explanation, created_at").in_("draft_id", draft_ids).execute()
-        real_findings = findings_res.data or []
+        # Fetch findings for these drafts with chunking to prevent query string limits
+        real_findings = []
+        for i in range(0, len(draft_ids), 50):
+            chunk = draft_ids[i:i + 50]
+            c_res = supabase.table("findings").select("id, draft_id, citation_id, lane, severity, explanation, created_at").in_("draft_id", chunk).execute()
+            real_findings.extend(c_res.data or [])
         for f in real_findings:
             d_id = f.get("draft_id")
             if d_id in drafts_findings_map:

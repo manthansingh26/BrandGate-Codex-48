@@ -61,6 +61,7 @@ export const Submit: React.FC<SubmitProps> = ({
 
   // Document upload state (.docx / .pdf)
   const [docFile, setDocFile] = useState<File | null>(null);
+  const [docPages, setDocPages] = useState<any[] | null>(null);
   const [docParsing, setDocParsing] = useState(false);
   const [docMeta, setDocMeta] = useState<{ filename: string; pageCount: number; fileType: string } | null>(null);
   const [unextractableImageNotice, setUnextractableImageNotice] = useState<string | null>(null);
@@ -80,6 +81,7 @@ export const Submit: React.FC<SubmitProps> = ({
     setPaletteUnsampleable(false);
     setError(null);
     setDocFile(null);
+    setDocPages(null);
     setDocParsing(false);
     setDocMeta(null);
     setUnextractableImageNotice(null);
@@ -123,6 +125,7 @@ export const Submit: React.FC<SubmitProps> = ({
         }
 
         setBodyText(parseResult.text);
+        setDocPages(parseResult.pages || null);
         if (!title || title === 'Creative Draft' || title === 'Diwali Festive Cookware Campaign' || title === 'NovaTech ANC 500 Launch Campaign') {
           const autoTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
           setTitle(autoTitle);
@@ -259,6 +262,20 @@ export const Submit: React.FC<SubmitProps> = ({
         const targetBrandId = activeBrand?.id || '00000000-0000-0000-0000-000000000001';
         const defaultFallbackTitle = isBrandB ? 'NovaTech ANC 500 Launch Campaign' : 'Diwali Festive Cookware Campaign';
 
+        // If document was uploaded and draft hasn't been created yet, upload draft document directly
+        if (!draftId && docFile) {
+          const uploadRes = await api.uploadDraftDocument(docFile, targetBrandId, {
+            title: title || defaultFallbackTitle,
+            altText: altText || undefined,
+            logoConfirmed: logoConfirmed,
+            bodyText: bodyText,
+          });
+          const resolvedDraft = uploadRes.draft || (await api.getDraft(uploadRes.id || uploadRes.draft_id));
+          const findingsList = uploadRes.findings || resolvedDraft.findings || [];
+          onReviewCompleted(resolvedDraft, findingsList, uploadRes.llm_review);
+          return;
+        }
+
         // If draft hasn't been created yet, create it
         if (!draftId) {
           const created = await api.createDraft({
@@ -297,13 +314,14 @@ export const Submit: React.FC<SubmitProps> = ({
           });
         }
 
-        // Run server-side review with image checks wired (Blocker 3)
+        // Run server-side review with image checks wired (Blocker 3) and docPages passed
         const activeContrast = sampledContrastResult ? sampledContrastResult.ratio : (contrastResult ? contrastResult.ratio : undefined);
         const reviewRes = await api.reviewDraft(draftId, {
           logo_confirmed: logoConfirmed,
           palette_off: isOffPalette,
           contrast_ratio: activeContrast,
           palette_unsampleable: paletteUnsampleable,
+          pages: docPages || undefined,
         });
         const updatedDraft = await api.getDraft(draftId);
         onReviewCompleted(updatedDraft, reviewRes.findings, reviewRes.llm_review);

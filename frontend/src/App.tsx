@@ -188,7 +188,10 @@ export const App: React.FC = () => {
           setActiveDraft(fetchedDraft);
           localStorage.setItem('brandgate_active_draft', JSON.stringify(fetchedDraft));
 
-          if (fetchedDraft.status !== 'draft') {
+          if (fetchedDraft.findings && fetchedDraft.findings.length > 0) {
+            setDraftFindings(fetchedDraft.findings);
+            localStorage.setItem('brandgate_draft_findings', JSON.stringify(fetchedDraft.findings));
+          } else if (fetchedDraft.status !== 'draft') {
             const reviewRes = await api.reviewDraft(fetchedDraft.id);
             setDraftFindings(reviewRes.findings || []);
             setLlmReviewResult(reviewRes.llm_review || null);

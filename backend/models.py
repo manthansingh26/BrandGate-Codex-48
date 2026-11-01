@@ -1,4 +1,4 @@
-from typing import Optional, Literal
+from typing import Optional, Literal, List, Dict, Any
 from pydantic import BaseModel, Field, field_validator
 
 class VaultItemCreate(BaseModel):
@@ -104,6 +104,7 @@ class ReviewDraftRequest(BaseModel):
     palette_off: bool = Field(False, description="Client-side canvas sampling detected off-palette colors")
     contrast_ratio: Optional[float] = Field(None, description="Calculated WCAG text contrast ratio")
     palette_unsampleable: bool = Field(False, description="Image palette could not be sampled")
+    pages: Optional[List[Dict[str, Any]]] = Field(None, description="Optional PDF pages metadata")
 
 class BrandCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Brand workspace name")
