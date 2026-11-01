@@ -78,7 +78,7 @@ export const App: React.FC = () => {
     return { id: '00000000-0000-0000-0000-000000000001', name: 'Demo Brand (Seeded)', created_by: 'system' };
   });
 
-  const handleBrandChange = (brand: Brand) => {
+  const handleBrandChange = async (brand: Brand) => {
     if (activeBrand?.id === brand.id) return;
     setActiveBrand(brand);
     if (typeof window !== 'undefined') {
@@ -97,6 +97,31 @@ export const App: React.FC = () => {
     setActiveDraft(null);
     setDraftFindings([]);
     setLlmReviewResult(null);
+
+    // Fetch the switched brand's latest draft if one exists (never leak other brand)
+    try {
+      setIsRestoringDraft(true);
+      const drafts = await api.listDrafts(brand.id);
+      if (drafts && drafts.length > 0) {
+        const latestSummary = drafts[0];
+        const fullDraft = await api.getDraft(latestSummary.id);
+        if (fullDraft && fullDraft.brand_id === brand.id) {
+          setActiveDraft(fullDraft);
+          setDraftFindings(fullDraft.findings || []);
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('brandgate_active_draft_id', fullDraft.id);
+              localStorage.setItem('brandgate_active_draft', JSON.stringify(fullDraft));
+              localStorage.setItem('brandgate_draft_findings', JSON.stringify(fullDraft.findings || []));
+            } catch {}
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Could not load latest draft for switched brand:', err);
+    } finally {
+      setIsRestoringDraft(false);
+    }
   };
 
   // Persona persistence in shared localStorage across browser reloads
@@ -473,6 +498,9 @@ export const App: React.FC = () => {
               onNavigateToSubmit={() => navigateToTab('submit')}
               apiStatus={apiStatus}
               isRestoringDraft={isRestoringDraft}
+              availableBrands={availableBrands}
+              activeBrand={activeBrand}
+              onSelectBrand={handleBrandChange}
             />
           )}
           {activeTab === 'review' && (

@@ -329,7 +329,7 @@ export const Home: React.FC<HomeProps> = ({
             </div>
 
             <p className="text-sm text-zinc-200 leading-relaxed">
-              This will replace your approved draft (Version 4, LOCKED APPROVED SNAPSHOT). Continue with a fresh demo draft, or Keep approved draft?
+              {`This will replace your approved draft (Version ${currentDraft?.current_version || 1}, LOCKED APPROVED SNAPSHOT). Continue with a fresh demo draft, or Keep approved draft?`}
             </p>
 
             <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-zinc-800">

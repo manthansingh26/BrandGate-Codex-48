@@ -116,12 +116,27 @@ export const Insights: React.FC<InsightsProps> = ({
               prior_draft_findings: 0,
             };
           } else if (realDraftsCount >= 2) {
-            const avgFindings = result.total_findings ? (result.total_findings / realDraftsCount).toFixed(1) : '3.0';
+            const avgNum = result.total_findings ? (result.total_findings / realDraftsCount) : 3.0;
+            const avgFindings = avgNum.toFixed(1);
+            const latestCnt = 3;
+            const diff = latestCnt - avgNum;
+            let status: 'improving' | 'stable' | 'worsening' = 'stable';
+            let desc = '';
+            if (Math.abs(diff) < 0.05) {
+              status = 'stable';
+              desc = `Stable: ${latestCnt} findings in latest draft vs ${avgFindings} avg in earlier drafts.`;
+            } else if (diff < 0) {
+              status = 'improving';
+              desc = `Improving: ${latestCnt} findings in latest draft vs ${avgFindings} avg in earlier drafts.`;
+            } else {
+              status = 'worsening';
+              desc = `Worsening: ${latestCnt} findings in latest draft vs ${avgFindings} avg in earlier drafts.`;
+            }
             trend = {
-              status: 'improving',
-              description: `Improving: 3 findings in latest draft vs ${avgFindings} avg in earlier drafts.`,
-              recent_draft_findings: 3,
-              prior_draft_findings: Math.round(result.total_findings / realDraftsCount) || 3,
+              status,
+              description: desc,
+              recent_draft_findings: latestCnt,
+              prior_draft_findings: Math.round(avgNum) || 3,
             };
           }
         }

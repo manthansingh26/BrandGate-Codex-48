@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Draft, Finding, ApiConnectionStatus, LlmReviewResult } from '../types';
+import { Draft, Finding, ApiConnectionStatus, LlmReviewResult, Brand } from '../types';
 import { api } from '../api/client';
+import { BrandSwitcher } from '../components/BrandSwitcher';
 import { runLocalDemoReview } from '../utils/localReviewEngine';
 import { Check, ArrowRight, RefreshCw, Sparkles, AlertCircle, AlertTriangle, ShieldCheck, CheckCircle2, Bot, Info } from 'lucide-react';
 
@@ -13,6 +14,9 @@ interface ReportProps {
   onNavigateToSubmit?: () => void;
   apiStatus: ApiConnectionStatus;
   isRestoringDraft?: boolean;
+  availableBrands?: Brand[];
+  activeBrand?: Brand | null;
+  onSelectBrand?: (brand: Brand) => void;
 }
 
 export const Report: React.FC<ReportProps> = ({
@@ -24,6 +28,9 @@ export const Report: React.FC<ReportProps> = ({
   onNavigateToSubmit,
   apiStatus,
   isRestoringDraft,
+  availableBrands,
+  activeBrand,
+  onSelectBrand,
 }) => {
   const [applyingFixId, setApplyingFixId] = useState<string | null>(null);
   const [applyFixElapsed, setApplyFixElapsed] = useState<number>(0);
@@ -57,24 +64,37 @@ export const Report: React.FC<ReportProps> = ({
       );
     }
     return (
-      <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-4">
-        <p className="text-zinc-400 text-sm">Draft not found — start a new demo draft</p>
+      <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-6">
+        {availableBrands && availableBrands.length > 0 && onSelectBrand && (
+          <div className="max-w-md mx-auto p-4 rounded-2xl bg-zinc-950 border border-zinc-800 shadow-lg">
+            <BrandSwitcher
+              availableBrands={availableBrands}
+              activeBrand={activeBrand || null}
+              onSelectBrand={onSelectBrand}
+              variant="pills"
+            />
+          </div>
+        )}
+        <p className="text-zinc-400 text-sm">
+          No active draft for <span className="text-white font-medium">{activeBrand?.name || 'this brand'}</span> — create or test a draft from Home or Submit.
+        </p>
         <button
           onClick={() => {
             if (typeof window !== 'undefined') {
-              window.history.pushState({ tab: 'home' }, '', '/');
+              window.history.pushState({ tab: 'submit' }, '', '/submit');
               window.dispatchEvent(new PopStateEvent('popstate'));
             }
           }}
-          className="btn-primary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs"
+          className="btn-primary-micro inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-bold text-xs shadow-lg shadow-teal-500/20"
         >
-          Return to Home
+          Create New Draft
         </button>
       </div>
     );
   }
 
   const handleApplyFix = async (finding: Finding) => {
+    if (applyingFixId) return; // Prevent double-click duplicates
     if (!finding.id || !finding.suggested_fix) return;
     setApplyingFixId(finding.id);
     setError(null);

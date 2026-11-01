@@ -287,6 +287,7 @@ class ApiClient {
       pages?: any[];
       image_url?: string | null;
       alt_text?: string | null;
+      remove_image?: boolean;
     }
   ): Promise<{
     findings: Finding[];
@@ -336,7 +337,12 @@ class ApiClient {
     return res.json();
   }
 
-  async reviseDraft(draftId: string, payload: { body_text: string; alt_text?: string | null }): Promise<{
+  async reviseDraft(draftId: string, payload: {
+    body_text: string;
+    alt_text?: string | null;
+    image_url?: string | null;
+    remove_image?: boolean;
+  }): Promise<{
     id: string;
     draft_id: string;
     version_no: number;

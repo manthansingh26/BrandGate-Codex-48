@@ -24,6 +24,11 @@ export const APPROVED_BRAND_PALETTE = [
   '#0F172A', // P-04 Text Slate Dark
 ];
 
+export const APPROVED_BRAND_B_PALETTE = [
+  '#06B6D4', // P-10 Electric Cyan
+  '#0B0F19', // P-11 Midnight Obsidian
+];
+
 /**
  * Extracts dominant colors from an image using HTML5 Canvas.
  * Labels: "Approximate" — never claims pixel-perfect detection.

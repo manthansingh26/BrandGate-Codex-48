@@ -2,6 +2,7 @@ import os
 import re
 import uuid
 import json
+import base64
 import tempfile
 import logging
 import concurrent.futures
@@ -794,11 +795,15 @@ async def upload_draft_document(
 
     parsed = parse_document(file_bytes, file.filename or "uploaded_document", active_vault_items)
 
-    # Honest limits: scanned-image PDF with no text layer cannot be text-checked
+    # Honest limits: document with no text layer cannot be text-checked
     if not parsed.get("has_text_layer"):
+        if parsed.get("file_type") == "docx":
+            msg = "DOCX document contains no extractable text — please upload a document with text content."
+        else:
+            msg = "Scanned-image PDF with no text layer detected — OCR is not supported in this phase. The document cannot be text-checked."
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Scanned-image PDF with no text layer detected — OCR is not supported in this phase. The document cannot be text-checked."
+            detail=msg
         )
 
     first_image_url = None
@@ -984,6 +989,7 @@ def get_draft(draft_id: str, request: Request = None):
             "timestamp": approve_decision.get("created_at") if approve_decision else draft.get("updated_at"),
             "vault_version": f"{brand_name} (Vault v1)",
             "brand_id": draft.get("brand_id"),
+            "approved_version": draft.get("current_version", 1),
         }
     else:
         draft["approved_snapshot"] = None
@@ -1054,15 +1060,38 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
     palette_off = payload.palette_off if payload else False
     contrast_ratio = payload.contrast_ratio if payload else None
     palette_unsampleable = payload.palette_unsampleable if payload else False
+    remove_image = payload.remove_image if payload else False
 
     # Persist and synchronize image asset / alt text if passed in review request
     draft_updates = {}
-    if payload and payload.image_url is not None:
-        draft_updates["image_url"] = payload.image_url
-        draft["image_url"] = payload.image_url
-    if payload and payload.alt_text is not None:
-        draft_updates["alt_text"] = payload.alt_text
-        draft["alt_text"] = payload.alt_text
+    if remove_image:
+        draft_updates["image_url"] = None
+        # If draft previously had an image attached, create a new version for the removal
+        if draft.get("image_url") is not None:
+            new_v = draft.get("current_version", 1) + 1
+            draft_updates["current_version"] = new_v
+            draft["current_version"] = new_v
+            try:
+                supabase.table("draft_versions").insert({
+                    "draft_id": actual_id,
+                    "version_no": new_v,
+                    "body_text": draft.get("body_text", ""),
+                    "alt_text": None,
+                }).execute()
+            except Exception as v_exc:
+                logger.warning(f"Could not insert draft version for image removal: {v_exc}")
+        draft["image_url"] = None
+        palette_off = False
+        contrast_ratio = None
+        palette_unsampleable = False
+    else:
+        if payload and payload.image_url is not None:
+            draft_updates["image_url"] = payload.image_url
+            draft["image_url"] = payload.image_url
+        if payload and payload.alt_text is not None:
+            draft_updates["alt_text"] = payload.alt_text
+            draft["alt_text"] = payload.alt_text
+
     if draft_updates:
         try:
             supabase.table("drafts").update(draft_updates).eq("id", actual_id).execute()
@@ -1074,33 +1103,50 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
         _save_cached_pages(actual_id, payload.pages)
 
     doc_meta = _DRAFT_DOC_META.get(actual_id) or _DRAFT_DOC_META.get(draft_id) or {}
-    if not palette_off and doc_meta.get("is_off_palette"):
-        palette_off = True
-    if not palette_unsampleable and (doc_meta.get("palette_unsampleable") or doc_meta.get("images_unextractable")):
-        palette_unsampleable = True
-    if contrast_ratio is None and doc_meta.get("contrast_ratio") is not None:
-        contrast_ratio = doc_meta.get("contrast_ratio")
+    if not remove_image:
+        if not palette_off and doc_meta.get("is_off_palette"):
+            palette_off = True
+        if not palette_unsampleable and (doc_meta.get("palette_unsampleable") or doc_meta.get("images_unextractable")):
+            palette_unsampleable = True
+        if contrast_ratio is None and doc_meta.get("contrast_ratio") is not None:
+            contrast_ratio = doc_meta.get("contrast_ratio")
 
-    # Backend image analysis fallback for data URLs (e.g. solid pink PNG direct review)
-    active_img_url = draft.get("image_url")
-    if active_img_url and active_img_url.startswith("data:image/") and not palette_off:
-        try:
-            parts = active_img_url.split(",", 1)
-            if len(parts) == 2:
-                img_bytes = base64.b64decode(parts[1])
-                approved_palette = extract_palette_from_vault(active_vault_items)
-                img_analysis = analyze_image_bytes(img_bytes, approved_palette)
-                if img_analysis.get("is_off_palette"):
-                    palette_off = True
-                if contrast_ratio is None and img_analysis.get("contrast_ratio") is not None:
-                    contrast_ratio = img_analysis.get("contrast_ratio")
-        except Exception as img_exc:
-            logger.warning(f"Backend image analysis fallback failed: {img_exc}")
+        # Carried-over image handling: never silently drop P-01 on re-review
+        active_img_url = draft.get("image_url")
+        if active_img_url:
+            # 1. If not already flagged off-palette, check if draft had previous palette findings
+            if not palette_off:
+                try:
+                    prev_p_res = supabase.table("findings").select("id").eq("draft_id", actual_id).like("citation_id", "P-%").execute()
+                    if prev_p_res.data and len(prev_p_res.data) > 0:
+                        palette_off = True
+                except Exception as p_exc:
+                    logger.warning(f"Could not check previous palette findings: {p_exc}")
+
+            # 2. Backend image analysis fallback for data URLs
+            if active_img_url.startswith("data:image/") and not palette_off:
+                try:
+                    parts = active_img_url.split(",", 1)
+                    if len(parts) == 2:
+                        img_bytes = base64.b64decode(parts[1])
+                        approved_palette = extract_palette_from_vault(active_vault_items)
+                        img_analysis = analyze_image_bytes(img_bytes, approved_palette)
+                        if img_analysis.get("is_off_palette"):
+                            palette_off = True
+                        if contrast_ratio is None and img_analysis.get("contrast_ratio") is not None:
+                            contrast_ratio = img_analysis.get("contrast_ratio")
+                except Exception as img_exc:
+                    logger.warning(f"Backend image analysis fallback failed: {img_exc}")
+    else:
+        doc_meta = {}
+
+    current_effective_image = None if remove_image else draft.get("image_url")
+    current_effective_alt = None if remove_image else draft.get("alt_text")
 
     validated_findings = run_deterministic_review(
         body_text=draft.get("body_text", ""),
-        alt_text=draft.get("alt_text"),
-        image_url=draft.get("image_url"),
+        alt_text=current_effective_alt,
+        image_url=current_effective_image,
         active_vault_items=active_vault_items,
         logo_confirmed=logo_confirmed,
         palette_off=palette_off,
@@ -1315,7 +1361,7 @@ def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID")
     }
 
     # Fetch all drafts for target_brand ordered chronologically
-    drafts_query = supabase.table("drafts").select("id, title, status, created_at").order("created_at")
+    drafts_query = supabase.table("drafts").select("id, title, status, current_version, created_at").order("created_at")
     if target_brand:
         drafts_query = drafts_query.eq("brand_id", target_brand)
     drafts_res = drafts_query.execute()
@@ -1330,7 +1376,7 @@ def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID")
         real_findings = []
         for i in range(0, len(draft_ids), 50):
             chunk = draft_ids[i:i + 50]
-            c_res = supabase.table("findings").select("id, draft_id, citation_id, lane, severity, explanation, created_at").in_("draft_id", chunk).execute()
+            c_res = supabase.table("findings").select("id, draft_id, version_no, citation_id, lane, severity, explanation, created_at").in_("draft_id", chunk).execute()
             real_findings.extend(c_res.data or [])
         for f in real_findings:
             d_id = f.get("draft_id")
@@ -1353,9 +1399,10 @@ def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID")
     }
     drafts_timeline = []
     for d in brand_drafts:
-        d_f = drafts_findings_map.get(d["id"], [])
+        cur_v = d.get("current_version", 1)
+        d_f = [f for f in drafts_findings_map.get(d["id"], []) if f.get("version_no") == cur_v or f.get("version_no") is None]
         has_c = any(f.get("lane") == "contradiction" for f in d_f)
-        if len(d_f) == 0:
+        if d.get("status") == "approved" or len(d_f) == 0:
             disp = "Clear to Publish"
             dispositions["clear_to_publish"] += 1
         elif has_c:
@@ -1411,26 +1458,36 @@ def get_insights(brand_id: Optional[str] = Query(None, description="Brand UUID")
 
     if len(brand_drafts) == 1:
         trend_status = "stable"
-        f_cnt = len(drafts_findings_map[brand_drafts[0]["id"]])
+        b_cur_v = brand_drafts[0].get("current_version", 1)
+        f_cnt = len([f for f in drafts_findings_map[brand_drafts[0]["id"]] if f.get("version_no") == b_cur_v or f.get("version_no") is None])
         trend_desc = f"Baseline established across 1 draft ({f_cnt} findings recorded)."
         recent_count = f_cnt
     elif len(brand_drafts) >= 2:
         latest_draft = brand_drafts[-1]
         prior_drafts = brand_drafts[:-1]
-        recent_count = len(drafts_findings_map[latest_draft["id"]])
-        prior_counts = [len(drafts_findings_map[d["id"]]) for d in prior_drafts]
-        prior_avg = sum(prior_counts) / len(prior_counts)
-        prior_count = int(prior_avg)
+        latest_cur_v = latest_draft.get("current_version", 1)
+        latest_f = [f for f in drafts_findings_map.get(latest_draft["id"], []) if f.get("version_no") == latest_cur_v or f.get("version_no") is None]
+        recent_count = len(latest_f)
 
-        if recent_count < prior_avg:
+        prior_counts = []
+        for d in prior_drafts:
+            d_v = d.get("current_version", 1)
+            p_f = [f for f in drafts_findings_map.get(d["id"], []) if f.get("version_no") == d_v or f.get("version_no") is None]
+            prior_counts.append(len(p_f))
+
+        prior_avg = sum(prior_counts) / len(prior_counts) if prior_counts else float(recent_count)
+        prior_count = int(round(prior_avg))
+
+        diff = recent_count - prior_avg
+        if abs(diff) < 0.05:
+            trend_status = "stable"
+            trend_desc = f"Stable: {recent_count} findings in latest draft vs {prior_avg:.1f} avg in earlier drafts."
+        elif diff < 0:
             trend_status = "improving"
             trend_desc = f"Improving: {recent_count} findings in latest draft vs {prior_avg:.1f} avg in earlier drafts."
-        elif recent_count > prior_avg:
+        else:
             trend_status = "worsening"
             trend_desc = f"Worsening: {recent_count} findings in latest draft vs {prior_avg:.1f} avg in earlier drafts."
-        else:
-            trend_status = "stable"
-            trend_desc = f"Stable: consistent {recent_count} findings across recent drafts."
 
     # "Fix this guideline first" line for the top repeated issue
     fix_first = "All guidelines in compliance. No repeat violations detected."
@@ -1508,6 +1565,16 @@ def apply_fix(draft_id: str, payload: ApplyFixRequest, request: Request = None):
     current_body = draft.get("body_text", "")
     new_body = apply_fix_to_text(current_body, finding)
 
+    if new_body == current_body:
+        return {
+            "id": actual_id,
+            "draft_id": actual_id,
+            "brand_id": draft["brand_id"],
+            "version_no": draft.get("current_version", 1),
+            "body_text": new_body,
+            "status": draft.get("status", "draft")
+        }
+
     new_version_no = draft.get("current_version", 1) + 1
     version_record = {
         "draft_id": actual_id,
@@ -1557,6 +1624,11 @@ def revise_draft(draft_id: str, payload: ReviseDraftRequest, request: Request = 
         "status": "draft",
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    if payload.remove_image:
+        update_data["image_url"] = None
+    elif payload.image_url is not None:
+        update_data["image_url"] = payload.image_url
+
     if payload.alt_text is not None:
         update_data["alt_text"] = payload.alt_text
 
@@ -1583,6 +1655,10 @@ def request_approval(draft_id: str, payload: RequestApprovalRequest, request: Re
 
     draft = verify_draft_access(supabase, draft_id, user)
     actual_id = draft["id"]
+
+    # Idempotent double-click safety: if already pending, return success
+    if draft.get("status") == "pending_approval":
+        return {"status": "pending_approval", "id": actual_id, "draft_id": actual_id}
 
     # Server-side state machine check: must be in "checked" or "needs_changes" status
     if draft.get("status") not in ["checked", "needs_changes"]:
@@ -1616,6 +1692,15 @@ def approve_draft(draft_id: str, payload: ApproveDraftRequest, request: Request 
 
     draft = verify_draft_access(supabase, draft_id, user)
     actual_id = draft["id"]
+
+    # Idempotent double-click safety: if already approved, return success
+    if draft.get("status") == "approved":
+        return {
+            "status": "approved",
+            "id": actual_id,
+            "draft_id": actual_id,
+            "compliance_badge": "VERIFIED COMPLIANT",
+        }
 
     # State machine check
     if draft.get("status") != "pending_approval":

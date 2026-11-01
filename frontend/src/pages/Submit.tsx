@@ -3,7 +3,7 @@ import { Draft, Finding, ApiConnectionStatus, Brand } from '../types';
 import { api } from '../api/client';
 import { supabase } from '../supabase';
 import { runLocalDemoReview } from '../utils/localReviewEngine';
-import { sampleImageColors, calculateContrastRatio, calculateSampledColorsContrast, ContrastResult, APPROVED_BRAND_PALETTE } from '../utils/imageAnalysis';
+import { sampleImageColors, calculateContrastRatio, calculateSampledColorsContrast, ContrastResult, APPROVED_BRAND_PALETTE, APPROVED_BRAND_B_PALETTE } from '../utils/imageAnalysis';
 import { BrandSwitcher } from '../components/BrandSwitcher';
 import { ShieldCheck, AlertCircle, RefreshCw, CheckCircle2, Image as ImageIcon, Eye, FileText, Upload, Info, AlertTriangle } from 'lucide-react';
 
@@ -49,6 +49,7 @@ export const Submit: React.FC<SubmitProps> = ({
   const [bodyText, setBodyText] = useState(getInitialBody);
   const [altText, setAltText] = useState(() => (isDraftForActiveBrand ? currentDraft?.alt_text || '' : ''));
   const [imagePreview, setImagePreview] = useState<string | null>(() => (isDraftForActiveBrand ? currentDraft?.image_url || null : null));
+  const [imageWasRemoved, setImageWasRemoved] = useState(false);
   const [logoConfirmed, setLogoConfirmed] = useState(false);
   const [sampledColors, setSampledColors] = useState<string[]>([]);
   const [isOffPalette, setIsOffPalette] = useState(false);
@@ -63,9 +64,26 @@ export const Submit: React.FC<SubmitProps> = ({
   const [docFile, setDocFile] = useState<File | null>(null);
   const [docPages, setDocPages] = useState<any[] | null>(null);
   const [docParsing, setDocParsing] = useState(false);
+  const [docParsingElapsed, setDocParsingElapsed] = useState(0);
   const [docMeta, setDocMeta] = useState<{ filename: string; pageCount: number; fileType: string } | null>(null);
   const [unextractableImageNotice, setUnextractableImageNotice] = useState<string | null>(null);
   const [honestLimitWarning, setHonestLimitWarning] = useState<string | null>(null);
+
+  // Timer for visible document parsing progress
+  useEffect(() => {
+    let timer: any = null;
+    if (docParsing) {
+      setDocParsingElapsed(0);
+      timer = setInterval(() => {
+        setDocParsingElapsed((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setDocParsingElapsed(0);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [docParsing]);
 
   // Synchronize and completely reset form state when active brand or draft changes
   useEffect(() => {
@@ -73,6 +91,7 @@ export const Submit: React.FC<SubmitProps> = ({
     setBodyText(getInitialBody());
     setAltText(isDraftForActiveBrand ? currentDraft?.alt_text || '' : '');
     setImagePreview(isDraftForActiveBrand ? currentDraft?.image_url || null : null);
+    setImageWasRemoved(false);
     setLogoConfirmed(false);
     setSampledColors([]);
     setIsOffPalette(false);
@@ -83,10 +102,31 @@ export const Submit: React.FC<SubmitProps> = ({
     setDocFile(null);
     setDocPages(null);
     setDocParsing(false);
+    setDocParsingElapsed(0);
     setDocMeta(null);
     setUnextractableImageNotice(null);
     setHonestLimitWarning(null);
   }, [activeBrand?.id, currentDraft?.id]);
+
+  // Carried-over image sampling: re-sample persisted image_url so P-01 is never silently dropped
+  useEffect(() => {
+    if (isDraftForActiveBrand && currentDraft?.image_url && !imageWasRemoved) {
+      const palette = isBrandB ? APPROVED_BRAND_B_PALETTE : APPROVED_BRAND_PALETTE;
+      sampleImageColors(currentDraft.image_url, palette)
+        .then((result) => {
+          if (result.status === 'analyzed') {
+            setSampledColors(result.sampledColors);
+            setIsOffPalette(result.isOffPalette);
+            if (result.sampledColors.length >= 2) {
+              setSampledContrastResult(calculateSampledColorsContrast(result.sampledColors));
+            }
+          }
+        })
+        .catch((err) => {
+          console.warn('Carried-over image sampling fallback:', err);
+        });
+    }
+  }, [currentDraft?.id, currentDraft?.image_url, isDraftForActiveBrand, isBrandB, imageWasRemoved]);
 
   const handleDocumentChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -115,11 +155,12 @@ export const Submit: React.FC<SubmitProps> = ({
       if (apiStatus === 'connected') {
         const parseResult = await api.parseDocument(file, activeBrand?.id);
 
-        // Honest limits check: scanned-image PDF with no text layer
+        // Honest limits check: document with no text layer
         if (!parseResult.has_text_layer) {
-          setHonestLimitWarning(
-            'Scanned-image PDF with no text layer detected — OCR is not supported in this phase. The document cannot be text-checked.'
-          );
+          const msg = parseResult.file_type === 'docx'
+            ? 'DOCX document contains no extractable text — please upload a document with text content.'
+            : 'Scanned-image PDF with no text layer detected — OCR is not supported in this phase. The document cannot be text-checked.';
+          setHonestLimitWarning(msg);
           setBodyText('');
           return;
         }
@@ -254,8 +295,9 @@ export const Submit: React.FC<SubmitProps> = ({
   };
 
   const handleReview = async () => {
+    if (reviewing) return;
     if (!bodyText.trim()) {
-      setError('Body text cannot be empty');
+      setError('Add draft text or upload a document before reviewing.');
       return;
     }
 
@@ -263,11 +305,13 @@ export const Submit: React.FC<SubmitProps> = ({
     setError(null);
 
     try {
-      let draftId = currentDraft?.id;
+      // After approval, start a fresh draft rather than overwriting locked snapshot
+      let draftId = currentDraft?.status === 'approved' ? null : currentDraft?.id;
+      const imageRemoved = Boolean(imageWasRemoved || (currentDraft?.image_url && !imagePreview));
 
       if (apiStatus === 'connected') {
         // Durable image URL: data: URLs or public https URLs are both fully durable
-        const durableImageUrl = imagePreview || null;
+        const durableImageUrl = imageRemoved ? null : (imagePreview || null);
 
         const targetBrandId = activeBrand?.id || '00000000-0000-0000-0000-000000000001';
         const defaultFallbackTitle = isBrandB ? 'NovaTech ANC 500 Launch Campaign' : 'Diwali Festive Cookware Campaign';
@@ -299,24 +343,28 @@ export const Submit: React.FC<SubmitProps> = ({
           draftId = created.id;
         } else if (
           bodyText !== currentDraft?.body_text ||
-          altText !== (currentDraft?.alt_text || '')
+          altText !== (currentDraft?.alt_text || '') ||
+          imageRemoved ||
+          imagePreview !== (currentDraft?.image_url || null)
         ) {
-          // CRITICAL PERSISTENCE FIX: Save latest editor text before review executes (Blocker 2)
+          // Save latest editor text and image adjustments before review executes
           const revised = await api.reviseDraft(draftId, {
             body_text: bodyText,
             alt_text: altText || null,
+            image_url: durableImageUrl,
+            remove_image: imageRemoved,
           });
           // Retain valid server draft ID whether returned as id or draft_id
           draftId = revised.id || (revised as any).draft_id || draftId;
         }
 
-        // Guarantee draft ID is non-null before review and image operations (Blocker 2)
+        // Guarantee draft ID is non-null before review and image operations
         if (!draftId) {
           throw new Error('Failed to resolve draft ID for review.');
         }
 
-        // Attach image metadata if durable image URL is present
-        if (durableImageUrl) {
+        // Attach image metadata if durable image URL is present and not removed
+        if (durableImageUrl && !imageRemoved) {
           await api.attachImage(draftId, {
             image_url: durableImageUrl,
             alt_text: altText || null,
@@ -324,7 +372,7 @@ export const Submit: React.FC<SubmitProps> = ({
           }).catch((err) => console.warn('attachImage non-fatal fallback:', err));
         }
 
-        // Run server-side review with image checks wired (Blocker 3) and docPages passed
+        // Run server-side review with image checks wired and docPages passed
         const activeContrast = sampledContrastResult ? sampledContrastResult.ratio : (contrastResult ? contrastResult.ratio : undefined);
         const reviewRes = await api.reviewDraft(draftId, {
           logo_confirmed: logoConfirmed,
@@ -334,9 +382,12 @@ export const Submit: React.FC<SubmitProps> = ({
           pages: docPages || undefined,
           image_url: durableImageUrl,
           alt_text: altText || null,
+          remove_image: imageRemoved,
         });
         const updatedDraft = await api.getDraft(draftId);
-        if (!updatedDraft.image_url && durableImageUrl) {
+        if (imageRemoved) {
+          updatedDraft.image_url = null;
+        } else if (!updatedDraft.image_url && durableImageUrl) {
           updatedDraft.image_url = durableImageUrl;
         }
         if (updatedDraft.alt_text === undefined && altText) {
@@ -347,14 +398,15 @@ export const Submit: React.FC<SubmitProps> = ({
         // Local demo mode review (when API offline)
         const targetBrandId = activeBrand?.id || '00000000-0000-0000-0000-000000000001';
         const defaultFallbackTitle = isBrandB ? 'NovaTech ANC 500 Launch Campaign' : 'Diwali Festive Cookware Campaign';
-        const localFindings = runLocalDemoReview(bodyText, altText, imagePreview);
+        const effectiveImg = imageRemoved ? null : imagePreview;
+        const localFindings = runLocalDemoReview(bodyText, altText, effectiveImg);
         const localDraft: Draft = {
           id: draftId || `local-${Date.now()}`,
           brand_id: targetBrandId,
           title: title || defaultFallbackTitle,
           body_text: bodyText,
           alt_text: altText,
-          image_url: imagePreview,
+          image_url: effectiveImg,
           status: 'checked',
           current_version: currentDraft?.current_version || 1,
           created_by_role: 'guest',
@@ -448,6 +500,14 @@ export const Submit: React.FC<SubmitProps> = ({
         )}
       </div>
 
+      {currentDraft?.status === 'approved' && (
+        <div className="mb-6 p-3.5 rounded-xl bg-teal-950/40 border border-teal-500/30 text-teal-300 text-xs flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 text-teal-400 flex-shrink-0" />
+          <span>
+            {`Previous draft was approved (Version ${currentDraft.current_version}, LOCKED APPROVED SNAPSHOT). Submitting here will create a fresh draft.`}
+          </span>
+        </div>
+      )}
 
       {error && (
         <div className="mb-6 p-3 rounded-lg bg-red-950/40 border border-red-900 text-red-400 text-sm">
@@ -478,8 +538,17 @@ export const Submit: React.FC<SubmitProps> = ({
 
           <div className="flex flex-wrap items-center gap-3">
             <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-teal-300 border border-teal-500/30 text-xs font-bold transition-colors">
-              <Upload className="h-3.5 w-3.5" />
-              {docParsing ? 'Extracting document...' : 'Choose .docx or .pdf file'}
+              {docParsing ? (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-teal-400" />
+                  <span>{`Extracting document... (${docParsingElapsed}s)`}</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>Choose .docx or .pdf file</span>
+                </>
+              )}
               <input
                 type="file"
                 accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -612,8 +681,11 @@ export const Submit: React.FC<SubmitProps> = ({
                         type="button"
                         onClick={() => {
                           setImagePreview(null);
+                          setImageWasRemoved(true);
                           setSampledColors([]);
                           setIsOffPalette(false);
+                          setSampledContrastResult(null);
+                          setContrastResult(null);
                         }}
                         className="text-zinc-500 hover:text-red-400 transition-colors"
                       >
@@ -811,23 +883,31 @@ export const Submit: React.FC<SubmitProps> = ({
             <span>Citation validator</span>
           </div>
 
-          <button
-            onClick={handleReview}
-            disabled={reviewing || !bodyText.trim()}
-            className="btn-primary-micro inline-flex items-center gap-2.5 px-8 py-3.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-sm shadow-xl shadow-teal-500/20 disabled:opacity-50"
-          >
-            {reviewing ? (
-              <>
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                Analyzing against Brand Vault...
-              </>
-            ) : (
-              <>
-                <ShieldCheck className="h-4 w-4" />
-                Review Draft
-              </>
+          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
+            {!bodyText.trim() && !docParsing && (
+              <span className="text-xs text-amber-400 font-medium flex items-center gap-1.5 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
+                <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                Add draft text or upload a document before reviewing.
+              </span>
             )}
-          </button>
+            <button
+              onClick={handleReview}
+              disabled={reviewing || !bodyText.trim()}
+              className="btn-primary-micro inline-flex items-center gap-2.5 px-8 py-3.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-sm shadow-xl shadow-teal-500/20 disabled:opacity-50"
+            >
+              {reviewing ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Analyzing against Brand Vault...
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="h-4 w-4" />
+                  Review Draft
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -100,6 +100,7 @@ export const Review: React.FC<ReviewProps> = ({
 
   // Request Approval
   const handleRequestApproval = async () => {
+    if (actionLoading) return;
     setActionLoading(true);
     setError(null);
     try {
@@ -115,6 +116,7 @@ export const Review: React.FC<ReviewProps> = ({
 
   // Approve Draft
   const handleApprove = async () => {
+    if (actionLoading) return;
     if (hasOpenFindings) {
       setError('Cannot approve: open findings remain');
       return;
@@ -135,6 +137,7 @@ export const Review: React.FC<ReviewProps> = ({
   // Request Changes
   const handleRequestChanges = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (actionLoading) return;
     if (!changesComment.trim()) return;
 
     setActionLoading(true);
