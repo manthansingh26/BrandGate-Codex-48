@@ -93,7 +93,21 @@ export const Review: React.FC<ReviewProps> = ({
   const isChecked = draft.status === 'checked';
   const isNeedsChanges = draft.status === 'needs_changes';
 
-  const openFindings = findings.filter(
+  const activeFindings = React.useMemo(() => {
+    if (!draft || !findings || !Array.isArray(findings)) return findings || [];
+    const curV = draft.current_version || 1;
+    let list = findings.filter(
+      (f: Finding) => f.version_no === curV || (curV === 1 && (f.version_no === undefined || f.version_no === null))
+    );
+    if (!draft.image_url) {
+      list = list.filter(
+        (f: Finding) => !['P-01', 'P-10', 'A-02', 'R-09'].includes(f.citation_id)
+      );
+    }
+    return list;
+  }, [draft?.current_version, draft?.image_url, findings]);
+
+  const openFindings = activeFindings.filter(
     (f) => f.lane === 'contradiction' || f.lane === 'evidence_needed'
   );
   const hasOpenFindings = openFindings.length > 0;
@@ -536,19 +550,19 @@ export const Review: React.FC<ReviewProps> = ({
               <div className="flex items-center justify-between py-1 border-b border-zinc-850">
                 <span className="text-zinc-400">Contradictions</span>
                 <span className="font-bold text-white font-mono">
-                  {findings.filter((f) => f.lane === 'contradiction').length}
+                  {activeFindings.filter((f) => f.lane === 'contradiction').length}
                 </span>
               </div>
               <div className="flex items-center justify-between py-1 border-b border-zinc-850">
                 <span className="text-zinc-400">Evidence Needed</span>
                 <span className="font-bold text-white font-mono">
-                  {findings.filter((f) => f.lane === 'evidence_needed').length}
+                  {activeFindings.filter((f) => f.lane === 'evidence_needed').length}
                 </span>
               </div>
               <div className="flex items-center justify-between py-1 border-b border-zinc-850">
                 <span className="text-zinc-400">Human Decisions</span>
                 <span className="font-bold text-white font-mono">
-                  {findings.filter((f) => f.lane === 'human_decision').length}
+                  {activeFindings.filter((f) => f.lane === 'human_decision').length}
                 </span>
               </div>
               <div className="flex items-center justify-between pt-1">

@@ -107,7 +107,7 @@ export const Report: React.FC<ReportProps> = ({
         const receiptTime = new Date().toISOString();
 
         // Immediate deterministic version creation from response
-        const remainingFindings = findings.filter((f) => f.id !== finding.id);
+        const remainingFindings = activeFindings.filter((f) => f.id !== finding.id);
         const newVersionNo = fixRes.version_no || (draft.current_version + 1);
         const newBody = fixRes.body_text;
 
@@ -196,14 +196,29 @@ export const Report: React.FC<ReportProps> = ({
     }
   };
 
-  const contradictions = findings.filter((f) => f.lane === 'contradiction');
-  const evidenceNeeded = findings.filter((f) => f.lane === 'evidence_needed');
-  const humanDecision = findings.filter((f) => f.lane === 'human_decision');
+  // Scope findings strictly to current draft version (never show findings from earlier versions or removed visual assets)
+  const activeFindings = React.useMemo(() => {
+    if (!draft || !findings || !Array.isArray(findings)) return findings || [];
+    const curV = draft.current_version || 1;
+    let list = findings.filter(
+      (f: Finding) => f.version_no === curV || (curV === 1 && (f.version_no === undefined || f.version_no === null))
+    );
+    if (!draft.image_url) {
+      list = list.filter(
+        (f: Finding) => !['P-01', 'P-10', 'A-02', 'R-09'].includes(f.citation_id)
+      );
+    }
+    return list;
+  }, [draft?.current_version, draft?.image_url, findings]);
+
+  const contradictions = activeFindings.filter((f) => f.lane === 'contradiction');
+  const evidenceNeeded = activeFindings.filter((f) => f.lane === 'evidence_needed');
+  const humanDecision = activeFindings.filter((f) => f.lane === 'human_decision');
   const aiFindings = llmReview?.findings || [];
 
   // Report disposition: Hold for Legal (if contradiction exists), Clear with Edits (if only evidence_needed / human_decision remain), Clear to Publish (if 0 findings)
   const disposition: 'Clear to Publish' | 'Clear with Edits' | 'Hold for Legal' =
-    findings.length === 0
+    activeFindings.length === 0
       ? 'Clear to Publish'
       : contradictions.length > 0
       ? 'Hold for Legal'
@@ -279,7 +294,7 @@ export const Report: React.FC<ReportProps> = ({
         </div>
         <div className="flex items-center gap-2 self-start sm:self-center font-mono text-xs">
           <span className="px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 text-zinc-300 font-bold">
-            {findings.length} {findings.length === 1 ? 'Finding' : 'Findings'}
+            {activeFindings.length} {activeFindings.length === 1 ? 'Finding' : 'Findings'}
           </span>
         </div>
       </div>
@@ -421,7 +436,7 @@ export const Report: React.FC<ReportProps> = ({
           <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
             <span>Governance Findings</span>
             <span className="text-sm font-mono font-normal text-zinc-400">
-              {draft.status === 'draft' ? '(— pending review)' : `(${findings.length} active)`}
+              {draft.status === 'draft' ? '(— pending review)' : `(${activeFindings.length} active)`}
             </span>
           </h2>
           <span className="text-xs text-teal-400 font-mono font-bold">"No citation, no flag"</span>
@@ -451,7 +466,7 @@ export const Report: React.FC<ReportProps> = ({
               <ArrowRight className="h-4 w-4" />
             </button>
           </div>
-        ) : findings.length === 0 ? (
+        ) : activeFindings.length === 0 ? (
           <div className="glass-card p-10 rounded-2xl border border-emerald-500/20 text-center space-y-3">
             <CheckCircle2 className="h-12 w-12 text-emerald-400 mx-auto" />
             <h3 className="text-xl font-bold text-white">All Governance Checks Passed!</h3>

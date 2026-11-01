@@ -106,13 +106,23 @@ export const App: React.FC = () => {
         const latestSummary = drafts[0];
         const fullDraft = await api.getDraft(latestSummary.id);
         if (fullDraft && fullDraft.brand_id === brand.id) {
+          const curV = fullDraft.current_version || 1;
+          let curFindings = (fullDraft.findings || []).filter(
+            (f: Finding) => f.version_no === curV || (curV === 1 && (f.version_no === undefined || f.version_no === null))
+          );
+          if (!fullDraft.image_url) {
+            curFindings = curFindings.filter(
+              (f: Finding) => !['P-01', 'P-10', 'A-02', 'R-09'].includes(f.citation_id)
+            );
+          }
+          fullDraft.findings = curFindings;
           setActiveDraft(fullDraft);
-          setDraftFindings(fullDraft.findings || []);
+          setDraftFindings(curFindings);
           if (typeof window !== 'undefined') {
             try {
               localStorage.setItem('brandgate_active_draft_id', fullDraft.id);
               localStorage.setItem('brandgate_active_draft', JSON.stringify(fullDraft));
-              localStorage.setItem('brandgate_draft_findings', JSON.stringify(fullDraft.findings || []));
+              localStorage.setItem('brandgate_draft_findings', JSON.stringify(curFindings));
             } catch {}
           }
         }
@@ -170,7 +180,25 @@ export const App: React.FC = () => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('brandgate_draft_findings') || sessionStorage.getItem('brandgate_draft_findings');
-        return saved ? JSON.parse(saved) : [];
+        const savedDraft = localStorage.getItem('brandgate_active_draft') || sessionStorage.getItem('brandgate_active_draft');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && savedDraft) {
+            const parsedDraft = JSON.parse(savedDraft);
+            const curV = parsedDraft?.current_version || 1;
+            let filtered = parsed.filter(
+              (f: Finding) => f.version_no === curV || (curV === 1 && (f.version_no === undefined || f.version_no === null))
+            );
+            if (!parsedDraft?.image_url) {
+              filtered = filtered.filter(
+                (f: Finding) => !['P-01', 'P-10', 'A-02', 'R-09'].includes(f.citation_id)
+              );
+            }
+            return filtered;
+          }
+          return Array.isArray(parsed) ? parsed : [];
+        }
+        return [];
       } catch {
         return [];
       }
@@ -210,21 +238,22 @@ export const App: React.FC = () => {
             return;
           }
 
+          const curV = fetchedDraft.current_version || 1;
+          let curFindings = (fetchedDraft.findings || []).filter(
+            (f: Finding) => f.version_no === curV || (curV === 1 && (f.version_no === undefined || f.version_no === null))
+          );
+          if (!fetchedDraft.image_url) {
+            curFindings = curFindings.filter(
+              (f: Finding) => !['P-01', 'P-10', 'A-02', 'R-09'].includes(f.citation_id)
+            );
+          }
+          fetchedDraft.findings = curFindings;
+
           setActiveDraft(fetchedDraft);
           localStorage.setItem('brandgate_active_draft', JSON.stringify(fetchedDraft));
 
-          if (fetchedDraft.findings && fetchedDraft.findings.length > 0) {
-            setDraftFindings(fetchedDraft.findings);
-            localStorage.setItem('brandgate_draft_findings', JSON.stringify(fetchedDraft.findings));
-          } else if (fetchedDraft.status !== 'draft') {
-            const reviewRes = await api.reviewDraft(fetchedDraft.id);
-            setDraftFindings(reviewRes.findings || []);
-            setLlmReviewResult(reviewRes.llm_review || null);
-            localStorage.setItem('brandgate_draft_findings', JSON.stringify(reviewRes.findings || []));
-            if (reviewRes.llm_review) {
-              localStorage.setItem('brandgate_llm_review', JSON.stringify(reviewRes.llm_review));
-            }
-          }
+          setDraftFindings(curFindings);
+          localStorage.setItem('brandgate_draft_findings', JSON.stringify(curFindings));
         } catch (err) {
           console.warn('Could not restore draft from shared backend ID:', err);
           localStorage.removeItem('brandgate_active_draft_id');

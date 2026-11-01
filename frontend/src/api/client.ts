@@ -273,6 +273,15 @@ class ApiClient {
           if (m) f.page = parseInt(m[1], 10);
         }
       });
+      const curV = data.current_version || 1;
+      data.findings = data.findings.filter(
+        (f: Finding) => f.version_no === curV || (curV === 1 && (f.version_no === undefined || f.version_no === null))
+      );
+      if (!data.image_url) {
+        data.findings = data.findings.filter(
+          (f: Finding) => !['P-01', 'P-10', 'A-02', 'R-09'].includes(f.citation_id)
+        );
+      }
     }
     return data;
   }

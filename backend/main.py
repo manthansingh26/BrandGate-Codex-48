@@ -900,6 +900,7 @@ async def upload_draft_document(
 
     for idx, f in enumerate(saved_findings):
         f["brand_id"] = brand_id
+        f["version_no"] = 1
         if idx < len(validated_findings) and validated_findings[idx].get("page") is not None:
             f["page"] = validated_findings[idx]["page"]
         elif f.get("page") is None:
@@ -962,8 +963,32 @@ def get_draft(draft_id: str, request: Request = None):
             if cached_pages:
                 _tag_page(f, cached_pages)
 
-    draft["versions"] = versions_res.data or []
-    draft["findings"] = findings_data
+    cur_version = draft.get("current_version", 1)
+    # Scope findings strictly to the current version of the draft
+    current_version_findings = [
+        f for f in findings_data
+        if f.get("version_no") == cur_version or (cur_version == 1 and f.get("version_no") is None)
+    ]
+
+    # If visual asset was removed or not attached, never return visual/image findings
+    if not draft.get("image_url"):
+        current_version_findings = [
+            f for f in current_version_findings
+            if f.get("citation_id") not in ("P-01", "P-10", "A-02", "R-09")
+        ]
+
+    # Attach version-specific findings to each version history entry for inspection
+    versions_data = versions_res.data or []
+    for v in versions_data:
+        v_no = v.get("version_no")
+        v["findings"] = [
+            f for f in findings_data
+            if f.get("version_no") == v_no or (v_no == 1 and f.get("version_no") is None)
+        ]
+
+    draft["versions"] = versions_data
+    draft["findings"] = current_version_findings
+    draft["all_findings"] = findings_data
     draft["comments"] = comments_res.data or []
     draft["decisions"] = decisions_res.data or []
 
@@ -1183,6 +1208,7 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
 
     for idx, f in enumerate(saved_findings):
         f["brand_id"] = draft["brand_id"]
+        f["version_no"] = current_version
         if idx < len(validated_findings) and validated_findings[idx].get("page") is not None:
             f["page"] = validated_findings[idx]["page"]
         elif f.get("page") is None:
