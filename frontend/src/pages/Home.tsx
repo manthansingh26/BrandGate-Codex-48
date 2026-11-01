@@ -134,7 +134,7 @@ export const Home: React.FC<HomeProps> = ({
 
         {/* Workspace Brand Switcher */}
         {availableBrands && availableBrands.length > 0 && onSelectBrand && (
-          <div className="order-3 w-full max-w-md mx-auto p-2.5 rounded-2xl bg-zinc-950/80 border border-zinc-800/90 shadow-lg shadow-black/40">
+          <div className="order-3 w-fit max-w-full mx-auto p-2 sm:p-2.5 rounded-2xl bg-zinc-950/80 border border-zinc-800/90 shadow-lg shadow-black/40">
             <BrandSwitcher
               availableBrands={availableBrands}
               activeBrand={activeBrand}

@@ -33,29 +33,34 @@ export const BrandSwitcher: React.FC<BrandSwitcherProps> = ({
 
   if (variant === 'pills') {
     return (
-      <div className={`flex flex-wrap items-center gap-2 ${className}`} id="brand-switcher-pills">
-        <span className="text-xs text-zinc-400 font-mono flex items-center gap-1.5 mr-1">
+      <div
+        className={`flex flex-wrap sm:flex-nowrap items-center justify-center gap-2 sm:gap-2.5 ${className}`}
+        id="brand-switcher-pills"
+      >
+        <span className="text-xs text-zinc-400 font-mono flex items-center gap-1.5 mr-0.5 sm:mr-1 shrink-0">
           <Building2 className="h-3.5 w-3.5 text-teal-400" />
           Workspace:
         </span>
-        {availableBrands.map((b) => {
-          const isSelected = activeBrand?.id === b.id;
-          return (
-            <button
-              key={b.id}
-              id={`brand-pill-${b.id}`}
-              onClick={() => onSelectBrand(b)}
-              className={`px-3 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 focus:outline-none focus:ring-1 focus:ring-teal-400 ${
-                isSelected
-                  ? 'bg-teal-400 text-black font-semibold shadow-md shadow-teal-500/10'
-                  : 'bg-zinc-900/90 text-zinc-300 hover:text-white hover:bg-zinc-800 border border-zinc-800'
-              }`}
-            >
-              {isSelected && <Check className="h-3 w-3 stroke-[2.5]" />}
-              <span>{b.name}</span>
-            </button>
-          );
-        })}
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-center gap-2">
+          {availableBrands.map((b) => {
+            const isSelected = activeBrand?.id === b.id;
+            return (
+              <button
+                key={b.id}
+                id={`brand-pill-${b.id}`}
+                onClick={() => onSelectBrand(b)}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 shrink-0 focus:outline-none focus:ring-1 focus:ring-teal-400 ${
+                  isSelected
+                    ? 'bg-teal-400 text-black font-semibold shadow-md shadow-teal-500/10'
+                    : 'bg-zinc-900/90 text-zinc-300 hover:text-white hover:bg-zinc-800 border border-zinc-800'
+                }`}
+              >
+                {isSelected && <Check className="h-3 w-3 stroke-[2.5]" />}
+                <span>{b.name}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     );
   }
