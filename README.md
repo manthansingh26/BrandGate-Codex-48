@@ -198,7 +198,11 @@ BrandGate includes real automated test suites located in `tests/`:
 | **Blocker Regressions** | `tests/test_blocker_regressions.py` | **5 / 5 passed** | Route authorization, creator self-approval gate (403), logo confirmation (`A-02`), contrast evaluation (`R-09`), revision contract keys. |
 | **Gemini Parser Suite** | `tests/test_gemini_parser.py` | **6 / 6 passed** | Fenced JSON stripping, balanced bracket parsing, flexible key extraction, citation drop validation. |
 | **Phase 7 Integration** | `tests/test_phase7_automated.py` | **6 / 6 passed** | Deterministic safety net, clean "No. 1" removal, keyword retrieval fallback, key-not-set handling, dummy key rejection, citation validator. |
-| **Frontend Production Build** | `cd frontend && npm run build` | **0 errors (1.76s)** | TypeScript compilation and Vite bundling across 1,538 modules. |
+| **Document Governance Suite** | `tests/test_document_governance.py` | **8 / 8 passed** | DOCX paragraph-order extraction, PDF page-order extraction with page citations, 10MB file limit enforcement, clean copy verification, off-palette PDF visual checks, Brand B multi-brand zero-leak isolation, unextractable image flagging, and scanned PDF rejection (no OCR). |
+| **Submit Brand Scoping** | `tests/test_submit_page_scoping.tsx` | **4 / 4 passed** | Direct `/submit` route brand scoping: Brand B shows empty form with Brand B rules only; Brand A shows cookware form with Brand A rules only. |
+| **Multi-Brand Isolation** | `tests/test_multibrand_isolation.py` | **5 / 5 passed** | Cross-brand draft isolation, scoped vaults, scoped insights, guest access restrictions. |
+| **Full Judge Path** | `tests/test_judge_path_full.py` | **7 / 7 passed** | Complete end-to-end judge path from review to apply-fix to approval and locked snapshot. |
+| **Frontend Production Build** | `cd frontend && npm run build` | **0 errors (2.00s)** | TypeScript compilation and Vite bundling across 1,540 modules. |
 
 ### 5 Verified Submission Fixtures
 
@@ -221,6 +225,7 @@ BrandGate includes real automated test suites located in `tests/`:
 4. **Connection Resilience**: Implemented a 70s health check timeout to accommodate Render free-tier cold starts, paired with a 90s total retry duration, live intermediate state reporting (`waking`), and heuristic detection for browser extension blocks (`net::ERR_BLOCKED_BY_CLIENT`).
 5. **Frontend Design Elevation**: Completely redesigned interface adopting Linear/Stripe bento layouts, dark space navy tokens (`#05070E`), subtle coordinate grid backdrops, glassmorphism cards, and touch-friendly mobile navigation for 375px screens.
 6. **Approval Workflow Hardening**: Transitioned approval state machine to server-side enforcement with creator self-approval prevention (403), open-findings approval blocking, and immutable locked snapshot generation.
+7. **Document Governance Engine (DOCX & PDF)**: Native document ingestion pipeline enforcing a 10MB file size limit shown before upload, extracting DOCX text in document order with paragraph breaks, extracting PDF text in page order with page metadata, citing findings by page (e.g. `[Page 1]`), extracting embedded raster images for palette and accessibility checks, and routing through the identical deterministic gate.
 
 ---
 
@@ -228,11 +233,13 @@ BrandGate includes real automated test suites located in `tests/`:
 
 1. **Render Free-Tier Cold Starts**: Services on Render sleep after 15 minutes of inactivity. The initial request can take 30–60 seconds while the container spins up. The UI shows `"Waking up server... please wait, retrying..."` with an in-place Retry button.
 2. **Google Gemini Free-Tier Rate Limits**: Google AI Studio free tier enforces rate limits. During traffic surges, requests fail gracefully to labeled status without interrupting deterministic review.
-3. **Approximate Palette Sampling**: Client-side canvas extraction is explicitly labeled `"Approximate"` and produces advisory Human Decision findings rather than automated rejections.
+3. **Approximate Palette Sampling**: Client-side canvas extraction and document image color sampling are explicitly labeled `"Approximate"` and produce advisory Human Decision findings rather than automated rejections.
 4. **Reviewer-Confirmed Logo Inspection**: Automated computer-vision logo detection is never claimed. Rule `A-02` requires reviewer confirmation.
 5. **AI Suggestions as Secondary Gate**: Language model reviews are advisory suggestions grounded exclusively in retrieved vault items. The deterministic engine remains the primary gate.
 6. **Apply Fix Review Execution**: Applying a fix triggers a re-review pass to guarantee the updated copy does not introduce new violations.
 7. **Narrow Mobile Viewport Testing**: The mobile layout has been verified using responsive design emulation; testing on specific physical mobile devices should be validated in DevTools at 360px and 390px widths.
+8. **Scanned PDF Text Ingestion (No OCR)**: In this release, BrandGate ingests digital text layers from PDF and DOCX documents. Scanned-image PDFs with no embedded text layer cannot be evaluated for text compliance. This limit is stated plainly in the UI before and during upload. Optical Character Recognition (OCR) is not performed, and no synthetic or hallucinated text results are ever produced from an image.
+9. **Document Inline Image Extraction**: Embedded raster images (PNG, JPEG) within DOCX and PDF documents are extracted in-order and evaluated against active brand color palettes and accessibility rules (WCAG contrast & alt text). If an image stream is corrupted, non-standard, or unextractable, the system explicitly reports `"Image could not be extracted — check manually"` in the UI and findings rather than generating a false pass.
 
 ---
 

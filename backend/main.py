@@ -5,7 +5,7 @@ import logging
 import concurrent.futures
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException, status, Query, Request
+from fastapi import FastAPI, HTTPException, status, Query, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
@@ -27,6 +27,7 @@ from models import (
 )
 from review_engine import run_deterministic_review, apply_fix_to_text
 from llm_review import run_grounded_llm_review
+from document_parser import parse_document, MAX_FILE_SIZE_BYTES
 
 # Configure secure module logger
 logger = logging.getLogger("brandgate.api")
@@ -51,6 +52,8 @@ def is_valid_uuid(val: Any) -> bool:
 # Thread pool executor and persistent cache for grounded LLM reviews (B1 decoupling & timeout protection)
 _LLM_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 _DRAFT_LAST_LLM_REVIEW: Dict[str, Dict[str, Any]] = {}
+_DRAFT_PAGES: Dict[str, List[Dict[str, Any]]] = {}
+_DRAFT_DOC_META: Dict[str, Dict[str, Any]] = {}
 
 app = FastAPI(
     title="BrandGate API",
@@ -683,6 +686,204 @@ def create_draft(payload: DraftCreate, request: Request = None):
     created_draft["versions"] = version_res.data or []
     return created_draft
 
+@app.post("/api/documents/parse", summary="Parse and extract text, pages, and images from DOCX or PDF")
+async def parse_document_endpoint(
+    file: UploadFile = File(...),
+    brand_id: Optional[str] = Form(None),
+    request: Request = None
+):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+    if brand_id:
+        check_brand_access(user, brand_id, write=False)
+
+    file_bytes = await file.read()
+    if len(file_bytes) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File size exceeds the 10MB limit. Please upload a file under 10MB."
+        )
+
+    lower_name = (file.filename or "").lower()
+    if not (lower_name.endswith(".docx") or lower_name.endswith(".pdf")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid document format. Only .docx and .pdf files are accepted."
+        )
+
+    supabase = get_supabase()
+    active_vault_items = []
+    if brand_id:
+        v_res = supabase.table("vault_items").select("*").eq("brand_id", brand_id).eq("status", "active").execute()
+        active_vault_items = v_res.data or []
+
+    try:
+        result = parse_document(file_bytes, file.filename or "uploaded_document", active_vault_items)
+        return result
+    except Exception as exc:
+        logger.error(f"Failed to parse document {file.filename}: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Document parsing error: {str(exc)}"
+        )
+
+@app.post("/api/drafts/upload", summary="Create draft from DOCX/PDF upload and run governance check", status_code=status.HTTP_201_CREATED)
+async def upload_draft_document(
+    file: UploadFile = File(...),
+    brand_id: str = Form(...),
+    title: Optional[str] = Form(None),
+    alt_text: Optional[str] = Form(None),
+    logo_confirmed: Optional[bool] = Form(False),
+    request: Request = None
+):
+    auth_header = request.headers.get("Authorization") if request else None
+    user = get_authenticated_user(auth_header)
+    check_brand_access(user, brand_id, write=False)
+
+    file_bytes = await file.read()
+    if len(file_bytes) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File size exceeds the 10MB limit. Please upload a file under 10MB."
+        )
+
+    lower_name = (file.filename or "").lower()
+    if not (lower_name.endswith(".docx") or lower_name.endswith(".pdf")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid document format. Only .docx and .pdf files are accepted."
+        )
+
+    supabase = get_supabase()
+    verify_brand_exists(supabase, brand_id)
+
+    v_res = supabase.table("vault_items").select("*").eq("brand_id", brand_id).eq("status", "active").execute()
+    active_vault_items = v_res.data or []
+
+    parsed = parse_document(file_bytes, file.filename or "uploaded_document", active_vault_items)
+
+    # Honest limits: scanned-image PDF with no text layer cannot be text-checked
+    if not parsed.get("has_text_layer"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Scanned-image PDF with no text layer detected — OCR is not supported in this phase. The document cannot be text-checked."
+        )
+
+    first_image_url = None
+    if parsed.get("images") and len(parsed["images"]) > 0:
+        first_image_url = parsed["images"][0].get("data_url")
+
+    doc_title = title or (file.filename or "Document Draft").rsplit(".", 1)[0]
+    creator_role = user["role"] if user else "guest"
+
+    draft_record = {
+        "brand_id": brand_id,
+        "title": doc_title,
+        "body_text": parsed["text"],
+        "image_url": first_image_url,
+        "alt_text": alt_text,
+        "status": "draft",
+        "current_version": 1,
+        "created_by_role": creator_role,
+    }
+    if user:
+        draft_record["created_by_user_id"] = user["id"]
+
+    try:
+        draft_res = supabase.table("drafts").insert(draft_record).execute()
+    except Exception as exc:
+        if "created_by_user_id" in draft_record:
+            draft_record.pop("created_by_user_id", None)
+            draft_res = supabase.table("drafts").insert(draft_record).execute()
+        else:
+            raise HTTPException(status_code=500, detail=f"Database error creating draft: {exc}")
+
+    if not draft_res.data:
+        raise HTTPException(status_code=500, detail="Failed to create draft.")
+
+    created_draft = draft_res.data[0]
+    actual_id = created_draft["id"]
+
+    version_record = {
+        "draft_id": actual_id,
+        "version_no": 1,
+        "body_text": parsed["text"],
+        "alt_text": alt_text
+    }
+    supabase.table("draft_versions").insert(version_record).execute()
+
+    if parsed.get("file_type") == "pdf" and parsed.get("pages"):
+        _DRAFT_PAGES[actual_id] = parsed["pages"]
+
+    _DRAFT_DOC_META[actual_id] = {
+        "filename": file.filename,
+        "file_type": parsed.get("file_type"),
+        "page_count": parsed.get("page_count", 1),
+        "has_images": parsed.get("has_images", False),
+        "is_off_palette": parsed.get("is_off_palette", False),
+        "images_unextractable": parsed.get("images_unextractable", False),
+        "unextractable_reason": parsed.get("unextractable_reason"),
+    }
+
+    pages_to_pass = parsed.get("pages") if parsed.get("file_type") == "pdf" else None
+    validated_findings = run_deterministic_review(
+        body_text=parsed["text"],
+        alt_text=alt_text,
+        image_url=first_image_url,
+        active_vault_items=active_vault_items,
+        logo_confirmed=bool(logo_confirmed),
+        palette_off=parsed.get("is_off_palette", False),
+        contrast_ratio=None,
+        pages=pages_to_pass,
+    )
+
+    saved_findings = []
+    if validated_findings:
+        findings_to_insert = [
+            {
+                "draft_id": actual_id,
+                "version_no": 1,
+                "lane": f["lane"],
+                "severity": f["severity"],
+                "citation_id": f["citation_id"],
+                "explanation": f["explanation"],
+                "suggested_fix": f.get("suggested_fix"),
+            }
+            for f in validated_findings
+        ]
+        insert_res = supabase.table("findings").insert(findings_to_insert).execute()
+        saved_findings = insert_res.data or []
+
+    for f in saved_findings:
+        f["brand_id"] = brand_id
+
+    supabase.table("drafts").update({"status": "checked"}).eq("id", actual_id).execute()
+    created_draft["status"] = "checked"
+    created_draft["findings"] = saved_findings
+    created_draft["versions"] = [version_record]
+
+    return {
+        "id": actual_id,
+        "draft_id": actual_id,
+        "brand_id": brand_id,
+        "title": doc_title,
+        "body_text": parsed["text"],
+        "image_url": first_image_url,
+        "alt_text": alt_text,
+        "status": "checked",
+        "current_version": 1,
+        "created_by_role": creator_role,
+        "draft": created_draft,
+        "findings": saved_findings,
+        "deterministic_findings": saved_findings,
+        "has_text_layer": True,
+        "page_count": parsed.get("page_count", 1),
+        "file_type": parsed.get("file_type"),
+        "has_images": parsed.get("has_images", False),
+        "images_unextractable": parsed.get("images_unextractable", False),
+        "unextractable_reason": parsed.get("unextractable_reason"),
+    }
+
 @app.get("/api/drafts/{draft_id}", summary="Get draft with all versions, findings, comments, decisions")
 def get_draft(draft_id: str, request: Request = None):
     auth_header = request.headers.get("Authorization") if request else None
@@ -733,6 +934,13 @@ def get_draft(draft_id: str, request: Request = None):
         }
     else:
         draft["approved_snapshot"] = None
+
+    doc_meta = _DRAFT_DOC_META.get(actual_id) or _DRAFT_DOC_META.get(draft_id)
+    if doc_meta:
+        draft["document_meta"] = doc_meta
+        if doc_meta.get("images_unextractable"):
+            draft["images_unextractable"] = True
+            draft["unextractable_reason"] = doc_meta.get("unextractable_reason")
 
     return draft
 
@@ -793,6 +1001,11 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
     palette_off = payload.palette_off if payload else False
     contrast_ratio = payload.contrast_ratio if payload else None
 
+    cached_pages = _DRAFT_PAGES.get(actual_id) or _DRAFT_PAGES.get(draft_id)
+    doc_meta = _DRAFT_DOC_META.get(actual_id) or _DRAFT_DOC_META.get(draft_id) or {}
+    if not palette_off and doc_meta.get("is_off_palette"):
+        palette_off = True
+
     validated_findings = run_deterministic_review(
         body_text=draft.get("body_text", ""),
         alt_text=draft.get("alt_text"),
@@ -801,6 +1014,7 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
         logo_confirmed=logo_confirmed,
         palette_off=palette_off,
         contrast_ratio=contrast_ratio,
+        pages=cached_pages,
     )
 
     current_version = draft.get("current_version", 1)
@@ -890,7 +1104,9 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
         "brand_id": draft["brand_id"],
         "deterministic_findings": saved_findings,
         "llm_review": llm_result,
-        "findings": saved_findings
+        "findings": saved_findings,
+        "images_unextractable": doc_meta.get("images_unextractable", False),
+        "unextractable_reason": doc_meta.get("unextractable_reason"),
     }
 
 @app.post("/api/drafts/{draft_id}/image", summary="Attach image URL and alt text to draft")

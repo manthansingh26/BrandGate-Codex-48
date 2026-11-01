@@ -5,7 +5,7 @@ import { supabase } from '../supabase';
 import { runLocalDemoReview } from '../utils/localReviewEngine';
 import { sampleImageColors, calculateContrastRatio, ContrastResult } from '../utils/imageAnalysis';
 import { BrandSwitcher } from '../components/BrandSwitcher';
-import { ShieldCheck, AlertCircle, RefreshCw, CheckCircle2, Image as ImageIcon, Eye } from 'lucide-react';
+import { ShieldCheck, AlertCircle, RefreshCw, CheckCircle2, Image as ImageIcon, Eye, FileText, Upload, Info, AlertTriangle } from 'lucide-react';
 
 const BRAND_B_ID = '00000000-0000-0000-0000-000000000002';
 
@@ -57,6 +57,13 @@ export const Submit: React.FC<SubmitProps> = ({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Document upload state (.docx / .pdf)
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docParsing, setDocParsing] = useState(false);
+  const [docMeta, setDocMeta] = useState<{ filename: string; pageCount: number; fileType: string } | null>(null);
+  const [unextractableImageNotice, setUnextractableImageNotice] = useState<string | null>(null);
+  const [honestLimitWarning, setHonestLimitWarning] = useState<string | null>(null);
+
   // Synchronize and completely reset form state when active brand or draft changes
   useEffect(() => {
     setTitle(getInitialTitle());
@@ -68,7 +75,84 @@ export const Submit: React.FC<SubmitProps> = ({
     setIsOffPalette(false);
     setContrastResult(null);
     setError(null);
+    setDocFile(null);
+    setDocParsing(false);
+    setDocMeta(null);
+    setUnextractableImageNotice(null);
+    setHonestLimitWarning(null);
   }, [activeBrand?.id, currentDraft?.id]);
+
+  const handleDocumentChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setError(null);
+    setHonestLimitWarning(null);
+    setUnextractableImageNotice(null);
+
+    // Validate document file size (<= 10MB limit shown BEFORE upload)
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Document file exceeds the 10MB limit. Please upload a document under 10MB.');
+      return;
+    }
+
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith('.docx') && !lower.endsWith('.pdf')) {
+      setError('Invalid document format. Only .docx and .pdf files are accepted.');
+      return;
+    }
+
+    setDocFile(file);
+    setDocParsing(true);
+
+    try {
+      if (apiStatus === 'connected') {
+        const parseResult = await api.parseDocument(file, activeBrand?.id);
+
+        // Honest limits check: scanned-image PDF with no text layer
+        if (!parseResult.has_text_layer) {
+          setHonestLimitWarning(
+            'Scanned-image PDF with no text layer detected — OCR is not supported in this phase. The document cannot be text-checked.'
+          );
+          setBodyText('');
+          return;
+        }
+
+        setBodyText(parseResult.text);
+        if (!title || title === 'Creative Draft' || title === 'Diwali Festive Cookware Campaign' || title === 'NovaTech ANC 500 Launch Campaign') {
+          const autoTitle = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+          setTitle(autoTitle);
+        }
+
+        setDocMeta({
+          filename: file.name,
+          pageCount: parseResult.page_count,
+          fileType: parseResult.file_type,
+        });
+
+        // Handle extracted images
+        if (parseResult.images && parseResult.images.length > 0) {
+          const firstImg = parseResult.images[0];
+          setImagePreview(firstImg.data_url);
+          setSampledColors(firstImg.sampled_colors || []);
+          setIsOffPalette(Boolean(firstImg.is_off_palette));
+        }
+
+        // Handle unextractable images: honest notice, never a fake pass
+        if (parseResult.images_unextractable) {
+          setUnextractableImageNotice(
+            parseResult.unextractable_reason || 'Image could not be extracted — check manually'
+          );
+        }
+      } else {
+        setError('Document parsing requires active BrandGate API connection.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to extract text from document');
+    } finally {
+      setDocParsing(false);
+    }
+  };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -310,6 +394,84 @@ export const Submit: React.FC<SubmitProps> = ({
 
       {/* Submission Form Container */}
       <div className="glass-card p-6 sm:p-8 rounded-2xl border border-white/[0.08] space-y-6 shadow-2xl">
+        {/* Document Draft Ingestion Dropzone */}
+        <div className="p-4 rounded-xl bg-black/40 border border-zinc-800 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-teal-400 flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Upload Document Draft (.docx or .pdf)
+              </span>
+              <p className="text-[11px] text-zinc-400 mt-0.5">
+                DOCX paragraphs and PDF pages go through the same deterministic brand governance gate.
+              </p>
+            </div>
+            <div className="text-right">
+              <span className="inline-block px-2.5 py-1 rounded-md text-[10px] font-mono font-bold bg-teal-950/60 text-teal-300 border border-teal-800/60">
+                Max file size: 10MB • Formats: .docx, .pdf
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-teal-300 border border-teal-500/30 text-xs font-bold transition-colors">
+              <Upload className="h-3.5 w-3.5" />
+              {docParsing ? 'Extracting document...' : 'Choose .docx or .pdf file'}
+              <input
+                type="file"
+                accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onChange={handleDocumentChange}
+                disabled={docParsing}
+                className="hidden"
+              />
+            </label>
+
+            {docMeta && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-teal-950/40 border border-teal-800/50 text-xs font-mono text-teal-300">
+                <CheckCircle2 className="h-3.5 w-3.5 text-teal-400 flex-shrink-0" />
+                <span>{docMeta.filename}</span>
+                {docMeta.fileType === 'pdf' && (
+                  <span className="text-teal-400/80">({docMeta.pageCount} page{docMeta.pageCount > 1 ? 's' : ''})</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDocMeta(null);
+                    setDocFile(null);
+                    setUnextractableImageNotice(null);
+                    setHonestLimitWarning(null);
+                  }}
+                  className="text-zinc-500 hover:text-red-400 ml-1 text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Honest Limits Notice */}
+          <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-zinc-800/80 text-[11px] text-zinc-400 flex items-start gap-2">
+            <Info className="h-3.5 w-3.5 text-zinc-400 flex-shrink-0 mt-0.5" />
+            <span>
+              <strong className="text-zinc-300 font-semibold">Honest Governance Limit:</strong> A scanned-image PDF with no text layer is NOT text-checked in this phase (no OCR). Only documents with an extractable text layer are checked against vault rules. Embedded images are extracted for palette and accessibility checks where possible.
+            </span>
+          </div>
+
+          {honestLimitWarning && (
+            <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-800 text-amber-300 text-xs flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 flex-shrink-0 text-amber-400" />
+              <span>{honestLimitWarning}</span>
+            </div>
+          )}
+
+          {unextractableImageNotice && (
+            <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-800 text-amber-300 text-xs flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-400" />
+              <span>{unextractableImageNotice}</span>
+            </div>
+          )}
+        </div>
+
         <div>
           <label className="block text-xs font-bold uppercase tracking-wider text-zinc-300 mb-1.5">
             Campaign / Creative Title

@@ -1,6 +1,6 @@
-import { Brand, GroupedVault, VaultItem, Draft, Finding, ApiConnectionStatus } from '../types';
+import { Brand, GroupedVault, VaultItem, Draft, Finding, ApiConnectionStatus, DocumentParseResult } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || 'http://localhost:8000';
 
 // Operational timing constants
 export const HEALTH_TIMEOUT_MS = 70000;      // 70 seconds: Render free-tier cold start window
@@ -406,6 +406,47 @@ class ApiClient {
     const res = await fetch(url, { headers: this.getHeaders() });
     if (!res.ok) {
       throw new Error('Failed to fetch insights data');
+    }
+    return res.json();
+  }
+
+  // Document Draft Upload & Parse Endpoints
+  async parseDocument(file: File, brandId?: string): Promise<DocumentParseResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (brandId) {
+      formData.append('brand_id', brandId);
+    }
+    const res = await fetch(`${this.base}/api/documents/parse`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || 'Failed to parse document');
+    }
+    return res.json();
+  }
+
+  async uploadDraftDocument(
+    file: File,
+    brandId: string,
+    options?: { title?: string; altText?: string; logoConfirmed?: boolean }
+  ): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('brand_id', brandId);
+    if (options?.title) formData.append('title', options.title);
+    if (options?.altText) formData.append('alt_text', options.altText);
+    if (options?.logoConfirmed) formData.append('logo_confirmed', 'true');
+
+    const res = await fetch(`${this.base}/api/drafts/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || 'Failed to upload document draft');
     }
     return res.json();
   }

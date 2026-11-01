@@ -287,6 +287,19 @@ export const Report: React.FC<ReportProps> = ({
         )}
       </div>
 
+      {/* Unextractable Image Warning if present */}
+      {(draft.images_unextractable || draft.document_meta?.images_unextractable) && (
+        <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-800/60 text-xs text-amber-300 flex items-center gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0" />
+          <div>
+            <span className="font-bold text-amber-200">Image could not be extracted — check manually</span>
+            <p className="text-amber-400/80 text-[11px] mt-0.5">
+              One or more embedded images in this document could not be decoded for automated palette verification. Manual brand compliance check required.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Findings Breakdown */}
       <div className="space-y-8">
         <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
@@ -500,6 +513,9 @@ interface FindingCardProps {
 
 const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applyingFixId, applyFixElapsed }) => {
   const isApplying = applyingFixId === finding.id;
+  const pageMatch = finding.explanation.match(/^\[Page\s+(\d+)\]/i);
+  const pageNumber = finding.page || (pageMatch ? parseInt(pageMatch[1], 10) : undefined);
+  const cleanExplanation = pageMatch ? finding.explanation.replace(/^\[Page\s+\d+\]\s*/i, '') : finding.explanation;
 
   const severityColor = {
     high: 'text-red-400 bg-red-950/30 border-red-800/40',
@@ -514,11 +530,16 @@ const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applying
           <span className="px-2.5 py-0.5 rounded-md text-xs font-mono font-bold bg-teal-500/10 text-teal-300 border border-teal-500/20">
             {finding.citation_id}
           </span>
+          {pageNumber && (
+            <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-teal-500/15 text-teal-200 border border-teal-500/30">
+              Page {pageNumber}
+            </span>
+          )}
           <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${severityColor}`}>
             {finding.severity} Severity
           </span>
         </div>
-        <p className="text-sm text-zinc-200 leading-relaxed font-sans">{finding.explanation}</p>
+        <p className="text-sm text-zinc-200 leading-relaxed font-sans">{cleanExplanation}</p>
         {finding.suggested_fix && (
           <div className="text-xs font-mono text-zinc-400 flex flex-wrap items-center gap-1.5 pt-1">
             <span className="text-teal-400 font-semibold font-sans">Approved Replacement (Authoritative):</span>

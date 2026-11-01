@@ -34,12 +34,41 @@ export interface Finding {
   draft_id?: string;
   brand_id?: string;
   version_no?: number;
+  page?: number;
   lane: FindingLane;
   severity: FindingSeverity;
   citation_id: string;
   explanation: string;
   suggested_fix?: string | null;
   created_at?: string;
+}
+
+export interface ExtractedImage {
+  name: string;
+  page_number: number;
+  data_url: string;
+  sampled_colors: string[];
+  is_off_palette: boolean;
+}
+
+export interface DocumentPage {
+  page_number: number;
+  text: string;
+}
+
+export interface DocumentParseResult {
+  filename: string;
+  file_type: 'docx' | 'pdf';
+  text: string;
+  page_count: number;
+  pages: DocumentPage[];
+  has_text_layer: boolean;
+  honest_limit_notice?: string | null;
+  has_images: boolean;
+  images: ExtractedImage[];
+  images_unextractable: boolean;
+  unextractable_reason?: string | null;
+  is_off_palette: boolean;
 }
 
 export interface DraftVersion {
@@ -131,6 +160,9 @@ export interface Draft {
   comments?: CommentItem[];
   decisions?: Decision[];
   approved_snapshot?: ApprovedSnapshot | null;
+  images_unextractable?: boolean | null;
+  unextractable_reason?: string | null;
+  document_meta?: any;
 }
 
 

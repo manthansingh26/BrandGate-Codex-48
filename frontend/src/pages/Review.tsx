@@ -346,6 +346,13 @@ export const Review: React.FC<ReviewProps> = ({
         </div>
       )}
 
+      {(draft.images_unextractable || draft.document_meta?.images_unextractable) && (
+        <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800 text-xs text-amber-300 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0" />
+          <span className="font-semibold text-amber-200">Image could not be extracted — check manually</span>
+        </div>
+      )}
+
       {error && (
         <div className="p-4 rounded-xl bg-red-950/40 border border-red-900 text-red-400 text-xs flex items-center gap-2">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />

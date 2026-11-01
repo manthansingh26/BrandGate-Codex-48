@@ -41,6 +41,24 @@ def validate_citations(
 # ------------------------------------------------------------------------------
 # Core Deterministic Review Logic (Server-Side, Zero AI, Rule-Based)
 # ------------------------------------------------------------------------------
+def _tag_page(finding: Dict[str, Any], target_term: Optional[str], pages: Optional[List[Dict[str, Any]]]) -> Dict[str, Any]:
+    if not pages:
+        return finding
+    matched_page = None
+    if target_term:
+        term_clean = target_term.strip().lower()
+        for p in pages:
+            if term_clean in p.get("text", "").lower():
+                matched_page = p.get("page_number", 1)
+                break
+    if matched_page is None:
+        matched_page = pages[0].get("page_number", 1) if pages else 1
+
+    finding["page"] = matched_page
+    if not finding.get("explanation", "").startswith("[Page "):
+        finding["explanation"] = f"[Page {matched_page}] {finding.get('explanation', '')}"
+    return finding
+
 def run_deterministic_review(
     body_text: str,
     alt_text: Optional[str],
@@ -48,7 +66,8 @@ def run_deterministic_review(
     active_vault_items: List[Dict[str, Any]],
     logo_confirmed: bool = False,
     palette_off: bool = False,
-    contrast_ratio: Optional[float] = None
+    contrast_ratio: Optional[float] = None,
+    pages: Optional[List[Dict[str, Any]]] = None
 ) -> List[Dict[str, Any]]:
     """
     Executes deterministic brand governance checks:
@@ -59,6 +78,8 @@ def run_deterministic_review(
     5. Alt-text accessibility check (Cited R-09)
     6. Logo verification check (Reviewer-confirmed only, cited A-02)
     7. Palette checking (Approximate sampling, cited P-01)
+    8. Visual contrast ratio check (Cited R-09)
+    When `pages` is provided (e.g. from PDF documents), findings cite their specific page.
     """
     raw_findings: List[Dict[str, Any]] = []
 
@@ -87,13 +108,14 @@ def run_deterministic_review(
                 draft_amount_str = m.group(1).rstrip(",.").replace(",", "")
                 draft_matched_str = m.group(0).rstrip(",.")
                 if draft_amount_str != approved_amount_str:
-                    raw_findings.append({
+                    finding = {
                         "lane": "contradiction",
                         "severity": "high",
                         "citation_id": fact_cid,
                         "explanation": f"Draft price '{draft_matched_str}' contradicts approved promotional fact {fact_cid} ('{approved_full_str}').",
                         "suggested_fix": approved_full_str
-                    })
+                    }
+                    raw_findings.append(_tag_page(finding, draft_matched_str, pages))
 
     # --------------------------------------------------------------------------
     # 2. Superlative & Performance Claims Check (Cited R-04 / R-15)
@@ -126,13 +148,14 @@ def run_deterministic_review(
                     elif "clinically" in claim.lower():
                         suggested = "certified quality"
 
-                    raw_findings.append({
+                    finding = {
                         "lane": "evidence_needed",
                         "severity": "high",
                         "citation_id": "R-04",
                         "explanation": f"Claim '{claim}' is a rank or performance superlative requiring an approved evidence record under rule R-04. The vault currently has no approved evidence record for this claim.",
                         "suggested_fix": suggested
-                    })
+                    }
+                    raw_findings.append(_tag_page(finding, claim, pages))
 
     # Rule R-15: Battery life and latency claims require verified lab test benchmarks.
     r15_rule = next((item for item in rules if item.get("item_id") == "R-15"), None)
@@ -150,13 +173,14 @@ def run_deterministic_review(
                     for item in facts
                 )
                 if not has_evidence:
-                    raw_findings.append({
+                    finding = {
                         "lane": "evidence_needed",
                         "severity": "high",
                         "citation_id": "R-15",
                         "explanation": f"Claim '{trigger}' requires verified lab test benchmarks under rule R-15. The vault currently has no approved lab benchmarks.",
                         "suggested_fix": "verified battery performance"
-                    })
+                    }
+                    raw_findings.append(_tag_page(finding, trigger, pages))
 
     # --------------------------------------------------------------------------
     # 3. Terminology Check
@@ -172,13 +196,14 @@ def run_deterministic_review(
                 already_covered = any(f.get("citation_id") in ("R-04", "R-15") and bad_term.lower() in f.get("explanation", "").lower() for f in raw_findings)
                 if not already_covered:
                     suggested = "certified audio" if "audio" in bad_term.lower() else ("certified quality" if "clinically" in bad_term.lower() else "trusted cookware brand")
-                    raw_findings.append({
+                    finding = {
                         "lane": "contradiction",
                         "severity": "medium",
                         "citation_id": item_id,
                         "explanation": f"Term '{bad_term}' is restricted under vault item {item_id}.",
                         "suggested_fix": suggested
-                    })
+                    }
+                    raw_findings.append(_tag_page(finding, bad_term, pages))
 
     # --------------------------------------------------------------------------
     # 4. Tone Check (Rule-Based Only)
@@ -188,13 +213,14 @@ def run_deterministic_review(
         hype_phrases = ["hurry now", "act fast", "don't miss out", "limited time only"]
         for hype in hype_phrases:
             if re.search(r'\b' + re.escape(hype) + r'\b', body_text, re.IGNORECASE):
-                raw_findings.append({
+                finding = {
                     "lane": "human_decision",
                     "severity": "low",
                     "citation_id": tone_rule.get("item_id"),
                     "explanation": f"rule_based_tone: Urgency phrase '{hype}' detected. Tone check sends uncertain tone to human reviewer decision.",
                     "suggested_fix": None
-                })
+                }
+                raw_findings.append(_tag_page(finding, hype, pages))
 
     # --------------------------------------------------------------------------
     # 5. Alt-Text Check (Cited R-09)
@@ -202,13 +228,14 @@ def run_deterministic_review(
     r09_rule = next((item for item in rules if item.get("item_id") == "R-09"), None)
     if r09_rule and image_url:
         if not alt_text or not alt_text.strip():
-            raw_findings.append({
+            finding = {
                 "lane": "human_decision",
                 "severity": "high",
                 "citation_id": "R-09",
                 "explanation": "Image asset attached but descriptive alt text is blank, violating accessibility rule R-09.",
                 "suggested_fix": "Add concise descriptive alt text"
-            })
+            }
+            raw_findings.append(_tag_page(finding, None, pages))
 
     # --------------------------------------------------------------------------
     # 6. Logo Verification Check (Reviewer-Confirmed Only, Cited A-02)
@@ -216,26 +243,28 @@ def run_deterministic_review(
     a02_rule = next((item for item in rules if item.get("item_id") == "A-02"), None)
     if a02_rule and image_url:
         if not logo_confirmed:
-            raw_findings.append({
+            finding = {
                 "lane": "human_decision",
                 "severity": "medium",
                 "citation_id": "A-02",
                 "explanation": "Logo not reviewer-confirmed. Current approved logo file required under rule A-02; archived logos are not accepted.",
                 "suggested_fix": None
-            })
+            }
+            raw_findings.append(_tag_page(finding, None, pages))
 
     # --------------------------------------------------------------------------
     # 7. Approximate Palette Check (Cited P-01)
     # --------------------------------------------------------------------------
     if palette_off and palettes:
         p01_item = next((item for item in palettes if item.get("item_id") == "P-01"), palettes[0])
-        raw_findings.append({
+        finding = {
             "lane": "human_decision",
             "severity": "low",
             "citation_id": p01_item.get("item_id"),
             "explanation": "Palette sampling is approximate — reviewer to confirm brand color alignment with approved palette.",
             "suggested_fix": None
-        })
+        }
+        raw_findings.append(_tag_page(finding, None, pages))
 
     # --------------------------------------------------------------------------
     # 8. Visual Contrast Ratio Check (Cited R-09) (Blocker 3)
@@ -243,13 +272,14 @@ def run_deterministic_review(
     if contrast_ratio is not None and contrast_ratio < 4.5:
         r09_rule = next((item for item in rules if item.get("item_id") == "R-09"), None)
         if r09_rule:
-            raw_findings.append({
+            finding = {
                 "lane": "human_decision",
                 "severity": "medium",
                 "citation_id": "R-09",
                 "explanation": f"Visual text-to-background contrast ratio ({contrast_ratio}:1) fails WCAG AA standard (4.5:1 minimum). Review creative background against text color under accessibility rule R-09.",
                 "suggested_fix": None
-            })
+            }
+            raw_findings.append(_tag_page(finding, None, pages))
 
     # Apply the Mandatory Citation Validator
     return validate_citations(raw_findings, active_items)
