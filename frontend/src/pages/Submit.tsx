@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { supabase } from '../supabase';
 import { runLocalDemoReview } from '../utils/localReviewEngine';
 import { sampleImageColors, calculateContrastRatio, calculateSampledColorsContrast, ContrastResult, APPROVED_BRAND_PALETTE, APPROVED_BRAND_B_PALETTE } from '../utils/imageAnalysis';
+import { applyImageUpload, applyImageRemoval, resolveReviewImage } from '../utils/imageUploadState';
 import { BrandSwitcher } from '../components/BrandSwitcher';
 import { ShieldCheck, AlertCircle, RefreshCw, CheckCircle2, Image as ImageIcon, Eye, FileText, Upload, Info, AlertTriangle } from 'lucide-react';
 
@@ -244,7 +245,10 @@ export const Submit: React.FC<SubmitProps> = ({
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
-      setImagePreview(dataUrl);
+      // A new file cancels any earlier Remove Image state in this same session.
+      const uploadedImageState = applyImageUpload(dataUrl);
+      setImagePreview(uploadedImageState.imagePreview);
+      setImageWasRemoved(uploadedImageState.imageWasRemoved);
 
       // 2. Perform client-side canvas palette extraction (Approximate)
       const currentBrandPalette = isBrandB ? ['#06B6D4', '#0B0F19'] : APPROVED_BRAND_PALETTE;
@@ -310,8 +314,11 @@ export const Submit: React.FC<SubmitProps> = ({
     try {
       const targetBrandId = activeBrand?.id || '00000000-0000-0000-0000-000000000001';
       const defaultFallbackTitle = isBrandB ? 'NovaTech ANC 500 Launch Campaign' : 'Diwali Festive Cookware Campaign';
-      const imageRemoved = Boolean(imageWasRemoved || (currentDraft?.image_url && !imagePreview));
-      const durableImageUrl = imageRemoved ? null : (imagePreview || null);
+      const { imageRemoved, durableImageUrl } = resolveReviewImage({
+        imageWasRemoved,
+        imagePreview,
+        currentDraftImageUrl: currentDraft?.image_url,
+      });
 
       if (apiStatus === 'connected') {
         // Unconditional Document Upload: .docx and .pdf uploads always create a fresh draft with target brand
@@ -820,8 +827,9 @@ export const Submit: React.FC<SubmitProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          setImagePreview(null);
-                          setImageWasRemoved(true);
+                          const removedImageState = applyImageRemoval();
+                          setImagePreview(removedImageState.imagePreview);
+                          setImageWasRemoved(removedImageState.imageWasRemoved);
                           setSampledColors([]);
                           setIsOffPalette(false);
                           setSampledContrastResult(null);

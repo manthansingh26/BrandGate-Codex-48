@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { BrandSwitcher } from '../components/BrandSwitcher';
 import { runLocalDemoReview } from '../utils/localReviewEngine';
 import { sampleImageColors, APPROVED_BRAND_PALETTE, APPROVED_BRAND_B_PALETTE } from '../utils/imageAnalysis';
+import { extractHexCodesFromVaultPalette, fallbackPaletteHexesForBrand } from '../utils/brandPalette';
 import { Check, ArrowRight, RefreshCw, Sparkles, AlertCircle, AlertTriangle, ShieldCheck, CheckCircle2, Bot, Info } from 'lucide-react';
 
 interface ReportProps {
@@ -58,6 +59,49 @@ export const Report: React.FC<ReportProps> = ({
   }, [applyingFixId]);
 
   const [sampledReportColors, setSampledReportColors] = useState<string[]>([]);
+
+  // Brand palette shown on Report is always the active brand's vault palette only.
+  const reportBrandId = activeBrand?.id || draft?.brand_id || null;
+  const defaultReportPalette = React.useMemo(
+    () => fallbackPaletteHexesForBrand(reportBrandId),
+    [reportBrandId]
+  );
+  const [reportPalette, setReportPalette] = useState<{
+    brandId: string | null;
+    hexes: string[];
+  }>({
+    brandId: reportBrandId,
+    hexes: defaultReportPalette,
+  });
+
+  useEffect(() => {
+    setReportPalette({ brandId: reportBrandId, hexes: defaultReportPalette });
+
+    if (!reportBrandId || apiStatus !== 'connected') {
+      return;
+    }
+
+    let active = true;
+    api
+      .getVault(reportBrandId)
+      .then((vault) => {
+        if (!active) return;
+        setReportPalette({
+          brandId: reportBrandId,
+          hexes: extractHexCodesFromVaultPalette(vault?.palette),
+        });
+      })
+      .catch(() => {
+        // Keep the brand-specific fallback; never fall back to another brand's colours.
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [reportBrandId, defaultReportPalette, apiStatus]);
+
+  const reportPaletteHexes =
+    reportPalette.brandId === reportBrandId ? reportPalette.hexes : defaultReportPalette;
 
   useEffect(() => {
     let active = true;
@@ -168,8 +212,25 @@ export const Report: React.FC<ReportProps> = ({
     );
   }
 
+  const navigateToSubmit = () => {
+    if (onNavigateToSubmit) {
+      onNavigateToSubmit();
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ tab: 'submit' }, '', '/submit');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  };
+
   const handleApplyFix = async (finding: Finding) => {
     if (applyingFixId) return; // Prevent double-click duplicates
+    // R-09 needs an editable alt-text field. Report has no image control, so
+    // never fake a local fix here: send the reviewer to Submit instead.
+    if (finding.citation_id === 'R-09') {
+      navigateToSubmit();
+      return;
+    }
     if (!finding.id || !finding.suggested_fix) return;
     setApplyingFixId(finding.id);
     setError(null);
@@ -589,6 +650,16 @@ export const Report: React.FC<ReportProps> = ({
             <span className="text-zinc-400 font-medium">none uploaded</span>
           )}
         </div>
+        <div className="text-xs flex flex-wrap items-center gap-2">
+          <span className="font-semibold text-zinc-300">Brand palette:</span>{' '}
+          {reportPaletteHexes.length > 0 ? (
+            <span className="text-zinc-400 font-mono text-[11px]">
+              {reportPaletteHexes.join(' · ')}
+            </span>
+          ) : (
+            <span className="text-zinc-500 font-mono text-[11px]">—</span>
+          )}
+        </div>
 
         {/* Warning if Alt text exists with NO image */}
         {draft.alt_text && !draft.image_url && (
@@ -735,6 +806,7 @@ export const Report: React.FC<ReportProps> = ({
                       key={f.id || i}
                       finding={f}
                       onApplyFix={handleApplyFix}
+                      onFixAltText={navigateToSubmit}
                       applyingFixId={applyingFixId}
                       applyFixElapsed={applyFixElapsed}
                     />
@@ -756,6 +828,7 @@ export const Report: React.FC<ReportProps> = ({
                       key={f.id || i}
                       finding={f}
                       onApplyFix={handleApplyFix}
+                      onFixAltText={navigateToSubmit}
                       applyingFixId={applyingFixId}
                       applyFixElapsed={applyFixElapsed}
                     />
@@ -777,6 +850,7 @@ export const Report: React.FC<ReportProps> = ({
                       key={f.id || i}
                       finding={f}
                       onApplyFix={handleApplyFix}
+                      onFixAltText={navigateToSubmit}
                       applyingFixId={applyingFixId}
                       applyFixElapsed={applyFixElapsed}
                     />
@@ -877,12 +951,20 @@ export const Report: React.FC<ReportProps> = ({
 interface FindingCardProps {
   finding: Finding;
   onApplyFix: (f: Finding) => void;
+  onFixAltText: () => void;
   applyingFixId: string | null;
   applyFixElapsed: number;
 }
 
-const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applyingFixId, applyFixElapsed }) => {
+const FindingCard: React.FC<FindingCardProps> = ({
+  finding,
+  onApplyFix,
+  onFixAltText,
+  applyingFixId,
+  applyFixElapsed,
+}) => {
   const isApplying = Boolean(finding.id && applyingFixId === finding.id);
+  const isAltTextFinding = finding.citation_id === 'R-09';
   const explanationText = finding.explanation || '';
   const pageMatch = explanationText.match(/\[Page\s+(\d+)\]/i) || explanationText.match(/\bPage\s+(\d+)\b/i);
   const pageNumber = (finding.page !== undefined && finding.page !== null) ? finding.page : (pageMatch ? parseInt(pageMatch[1], 10) : undefined);
@@ -913,7 +995,9 @@ const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applying
         <p className="text-sm text-zinc-200 leading-relaxed font-sans">{cleanExplanation}</p>
         {finding.suggested_fix && (
           <div className="text-xs font-mono text-zinc-400 flex flex-wrap items-center gap-1.5 pt-1">
-            <span className="text-teal-400 font-semibold font-sans">Approved Replacement (Authoritative):</span>
+            <span className="text-teal-400 font-semibold font-sans">
+              {isAltTextFinding ? 'Required action:' : 'Approved Replacement (Authoritative):'}
+            </span>
             <span className="px-2 py-0.5 rounded bg-black/60 border border-teal-500/30 text-teal-300 font-bold">
               "{finding.suggested_fix}"
             </span>
@@ -921,7 +1005,19 @@ const FindingCard: React.FC<FindingCardProps> = ({ finding, onApplyFix, applying
         )}
       </div>
 
-      {finding.suggested_fix && (
+      {finding.suggested_fix && isAltTextFinding && (
+        <button
+          type="button"
+          onClick={onFixAltText}
+          className="btn-primary-micro inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-400 text-black font-bold text-xs shadow-md shadow-teal-500/20"
+          title="Alt text must be edited on the Submit page — Report has no image control"
+        >
+          <ArrowRight className="h-3.5 w-3.5" />
+          Add alt text on Submit
+        </button>
+      )}
+
+      {finding.suggested_fix && !isAltTextFinding && (
         <button
           onClick={() => onApplyFix(finding)}
           disabled={applyingFixId !== null}
