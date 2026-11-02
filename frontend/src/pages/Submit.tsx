@@ -106,7 +106,7 @@ export const Submit: React.FC<SubmitProps> = ({
     setDocMeta(null);
     setUnextractableImageNotice(null);
     setHonestLimitWarning(null);
-  }, [activeBrand?.id, currentDraft?.id]);
+  }, [activeBrand?.id, currentDraft?.id, currentDraft?.current_version, currentDraft?.image_url, currentDraft?.alt_text]);
 
   // Carried-over image sampling: re-sample persisted image_url so P-01 is never silently dropped
   useEffect(() => {
@@ -356,6 +356,14 @@ export const Submit: React.FC<SubmitProps> = ({
 
         // If draft hasn't been created yet, create it
         const effectiveAltText = imageRemoved ? null : altText;
+        const hasImageChanged =
+          imageRemoved ||
+          imagePreview !== (currentDraft?.image_url || null);
+        const hasAltChanged =
+          (effectiveAltText || '') !== (currentDraft?.alt_text || '');
+        const hasBodyChanged =
+          bodyText !== currentDraft?.body_text;
+
         if (!draftId) {
           const created = await api.createDraft({
             brand_id: targetBrandId,
@@ -366,12 +374,7 @@ export const Submit: React.FC<SubmitProps> = ({
             created_by_role: 'guest',
           });
           draftId = created.id;
-        } else if (
-          bodyText !== currentDraft?.body_text ||
-          altText !== (currentDraft?.alt_text || '') ||
-          imageRemoved ||
-          imagePreview !== (currentDraft?.image_url || null)
-        ) {
+        } else if (hasBodyChanged || hasImageChanged || hasAltChanged) {
           // Save latest editor text and image adjustments before review executes
           try {
             const revised = await api.reviseDraft(draftId, {
@@ -442,20 +445,35 @@ export const Submit: React.FC<SubmitProps> = ({
           }
         }
 
-        // Ensure R-09 finding is present when image is attached but alt is blank
+        // Ensure image findings (R-09, P-01/P-10) are present on off-palette / blank alt, never duplicate
         let findingsList = reviewRes.findings || [];
-        if (durableImageUrl && !imageRemoved && (!effectiveAltText || !effectiveAltText.trim())) {
-          if (!findingsList.some((f) => f.citation_id === 'R-09')) {
+        if (durableImageUrl && !imageRemoved) {
+          if (!effectiveAltText || !effectiveAltText.trim()) {
+            if (!findingsList.some((f) => f.citation_id === 'R-09')) {
+              findingsList.push({
+                id: `finding-r09-${Date.now()}`,
+                draft_id: draftId,
+                brand_id: targetBrandId,
+                version_no: updatedDraft.current_version,
+                lane: 'human_decision',
+                severity: 'high',
+                citation_id: 'R-09',
+                explanation: 'Image asset attached but descriptive alt text is blank, violating accessibility rule R-09.',
+                suggested_fix: 'Add concise descriptive alt text',
+              });
+            }
+          }
+          if (isOffPalette && !findingsList.some((f) => f.citation_id === 'P-01' || f.citation_id === 'P-10')) {
             findingsList.push({
-              id: `finding-r09-${Date.now()}`,
+              id: `finding-p01-${Date.now()}`,
               draft_id: draftId,
               brand_id: targetBrandId,
               version_no: updatedDraft.current_version,
               lane: 'human_decision',
-              severity: 'high',
-              citation_id: 'R-09',
-              explanation: 'Image asset attached but descriptive alt text is blank, violating accessibility rule R-09.',
-              suggested_fix: 'Add concise descriptive alt text',
+              severity: 'low',
+              citation_id: isBrandB ? 'P-10' : 'P-01',
+              explanation: 'Sampling: Approximate — reviewer to confirm brand color alignment with approved palette.',
+              suggested_fix: null,
             });
           }
         } else if (imageRemoved) {
@@ -473,7 +491,28 @@ export const Submit: React.FC<SubmitProps> = ({
             : currentDraft?.id;
         const effectiveImg = imageRemoved ? null : imagePreview;
         const localAlt = imageRemoved ? null : (altText.trim() ? altText : null);
-        const localFindings = runLocalDemoReview(bodyText, localAlt, effectiveImg);
+        const hasImageChanged =
+          imageRemoved ||
+          imagePreview !== (currentDraft?.image_url || null);
+        const hasAltChanged =
+          (localAlt || '') !== (currentDraft?.alt_text || '');
+        const hasBodyChanged =
+          bodyText !== currentDraft?.body_text;
+        const shouldIncrementVersion = Boolean(
+          currentDraft && (hasBodyChanged || hasImageChanged || hasAltChanged)
+        );
+        const newVersion = shouldIncrementVersion
+          ? (currentDraft?.current_version || 1) + 1
+          : (currentDraft?.current_version || 1);
+
+        const localFindings = runLocalDemoReview(
+          bodyText,
+          localAlt,
+          effectiveImg,
+          undefined,
+          targetBrandId,
+          isOffPalette
+        );
         const localDraft: Draft = {
           id: draftId || `local-${Date.now()}`,
           brand_id: targetBrandId,
@@ -482,16 +521,26 @@ export const Submit: React.FC<SubmitProps> = ({
           alt_text: localAlt,
           image_url: effectiveImg,
           status: 'checked',
-          current_version: currentDraft?.current_version ? currentDraft.current_version + 1 : 1,
+          current_version: newVersion,
           created_by_role: 'guest',
-          versions: currentDraft?.versions || [
-            {
-              version_no: 1,
-              body_text: bodyText,
-              alt_text: altText,
-              created_at: new Date().toISOString(),
-            },
-          ],
+          versions: shouldIncrementVersion && currentDraft?.versions
+            ? [
+                ...currentDraft.versions,
+                {
+                  version_no: newVersion,
+                  body_text: bodyText,
+                  alt_text: localAlt,
+                  created_at: new Date().toISOString(),
+                },
+              ]
+            : (currentDraft?.versions || [
+                {
+                  version_no: 1,
+                  body_text: bodyText,
+                  alt_text: localAlt,
+                  created_at: new Date().toISOString(),
+                },
+              ]),
         };
         onReviewCompleted(localDraft, localFindings);
       }

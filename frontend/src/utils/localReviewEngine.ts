@@ -38,6 +38,13 @@ export const FALLBACK_VAULT_ITEMS: VaultItem[] = [
     status: 'active',
   },
   {
+    item_id: 'P-01',
+    kind: 'palette',
+    title: 'Primary Brand Blue (#1E3A8A)',
+    text: '#1E3A8A - Seeded control brand blue.',
+    status: 'active',
+  },
+  {
     item_id: 'T-01',
     kind: 'terminology',
     title: 'Restricted Term: clinically proven',
@@ -96,7 +103,8 @@ export function runLocalDemoReview(
   altText?: string | null,
   imageUrl?: string | null,
   vaultItems?: VaultItem[],
-  brandId?: string
+  brandId?: string,
+  paletteOff?: boolean
 ): Finding[] {
   const isBrandB = brandId === '00000000-0000-0000-0000-000000000002';
   const effectiveVault = vaultItems || (isBrandB ? FALLBACK_VAULT_ITEMS_BRAND_B : FALLBACK_VAULT_ITEMS);
@@ -149,6 +157,18 @@ export function runLocalDemoReview(
         citation_id: 'T-10',
         explanation: `[Local demo check — backend unavailable] Audio superlative 'world's best audio' is unapproved under rule T-10. Approved term: 'PureSilence ANC'.`,
         suggested_fix: 'PureSilence ANC',
+      });
+    }
+
+    // Brand B: 4. Palette check (P-10)
+    if (imageUrl && paletteOff) {
+      rawFindings.push({
+        id: `local-palette-${Date.now()}`,
+        lane: 'human_decision',
+        severity: 'low',
+        citation_id: 'P-10',
+        explanation: 'Sampling: Approximate — reviewer to confirm brand color alignment with approved palette.',
+        suggested_fix: null,
       });
     }
   } else {
@@ -214,6 +234,18 @@ export function runLocalDemoReview(
         severity: 'medium',
         citation_id: 'A-02',
         explanation: '[Local demo check — backend unavailable] Logo not reviewer-confirmed. Current approved logo file required under rule A-02; archived logos are not accepted.',
+        suggested_fix: null,
+      });
+    }
+
+    // Brand A: 5. Palette check (P-01)
+    if (imageUrl && paletteOff) {
+      rawFindings.push({
+        id: `local-palette-${Date.now()}`,
+        lane: 'human_decision',
+        severity: 'low',
+        citation_id: 'P-01',
+        explanation: 'Sampling: Approximate — reviewer to confirm brand color alignment with approved palette.',
         suggested_fix: null,
       });
     }

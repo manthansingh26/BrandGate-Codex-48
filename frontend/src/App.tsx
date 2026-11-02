@@ -519,7 +519,7 @@ export const App: React.FC = () => {
           )}
           {activeTab === 'submit' && (
             <Submit
-              key={`${activeBrand?.id || 'default'}-${activeDraft?.id || 'new'}`}
+              key={`${activeBrand?.id || 'default'}-${activeDraft?.id || 'new'}-${activeDraft?.current_version || 1}`}
               activeBrand={activeBrand}
               availableBrands={availableBrands}
               onSelectBrand={handleBrandChange}

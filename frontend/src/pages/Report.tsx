@@ -207,7 +207,23 @@ export const Report: React.FC<ReportProps> = ({
 
         // Run re-review in background
         try {
-          const reviewRes = await api.reviewDraft(draft.id);
+          const isBrandB = draft.brand_id === '00000000-0000-0000-0000-000000000002';
+          const palette = isBrandB ? APPROVED_BRAND_B_PALETTE : APPROVED_BRAND_PALETTE;
+          let reportPaletteOff = false;
+          if (draft.image_url) {
+            try {
+              const analysis = await sampleImageColors(draft.image_url, palette);
+              if (analysis.status === 'analyzed') {
+                reportPaletteOff = analysis.isOffPalette;
+              }
+            } catch {}
+          }
+          const reviewRes = await api.reviewDraft(draft.id, {
+            image_url: draft.image_url,
+            alt_text: draft.alt_text,
+            palette_off: reportPaletteOff,
+            remove_image: !draft.image_url,
+          });
           const updatedDraft = await api.getDraft(draft.id);
           // Sync versions so receipt timestamp remains aligned while preserving attached image
           const synchronizedDraft: Draft = {
@@ -219,7 +235,43 @@ export const Report: React.FC<ReportProps> = ({
                 ? updatedDraft.versions
                 : immediateDraft.versions,
           };
-          onDraftUpdated(synchronizedDraft, reviewRes.findings, reviewRes.llm_review);
+
+          let reReviewFindings = reviewRes.findings || [];
+          if (synchronizedDraft.image_url) {
+            const hasAlt = synchronizedDraft.alt_text && synchronizedDraft.alt_text.trim();
+            if (!hasAlt && !reReviewFindings.some((f) => f.citation_id === 'R-09')) {
+              reReviewFindings.push({
+                id: `finding-r09-${Date.now()}`,
+                draft_id: draft.id,
+                brand_id: draft.brand_id,
+                version_no: synchronizedDraft.current_version,
+                lane: 'human_decision',
+                severity: 'high',
+                citation_id: 'R-09',
+                explanation: 'Image asset attached but descriptive alt text is blank, violating accessibility rule R-09.',
+                suggested_fix: 'Add concise descriptive alt text',
+              });
+            }
+            if (reportPaletteOff && !reReviewFindings.some((f) => f.citation_id === 'P-01' || f.citation_id === 'P-10')) {
+              reReviewFindings.push({
+                id: `finding-p01-${Date.now()}`,
+                draft_id: draft.id,
+                brand_id: draft.brand_id,
+                version_no: synchronizedDraft.current_version,
+                lane: 'human_decision',
+                severity: 'low',
+                citation_id: isBrandB ? 'P-10' : 'P-01',
+                explanation: 'Sampling: Approximate — reviewer to confirm brand color alignment with approved palette.',
+                suggested_fix: null,
+              });
+            }
+          } else {
+            reReviewFindings = reReviewFindings.filter(
+              (f) => !['P-01', 'P-10', 'A-02', 'R-09'].includes(f.citation_id)
+            );
+          }
+
+          onDraftUpdated(synchronizedDraft, reReviewFindings, reviewRes.llm_review);
         } catch (pollErr) {
           console.warn('Background AI re-review poll deferred, deterministic version authoritative:', pollErr);
         } finally {
@@ -262,7 +314,26 @@ export const Report: React.FC<ReportProps> = ({
           ],
         };
 
-        const localNewFindings = runLocalDemoReview(newBody, draft.alt_text, draft.image_url);
+        const isBrandB = draft.brand_id === '00000000-0000-0000-0000-000000000002';
+        const palette = isBrandB ? APPROVED_BRAND_B_PALETTE : APPROVED_BRAND_PALETTE;
+        let reportPaletteOff = false;
+        if (draft.image_url) {
+          try {
+            const analysis = await sampleImageColors(draft.image_url, palette);
+            if (analysis.status === 'analyzed') {
+              reportPaletteOff = analysis.isOffPalette;
+            }
+          } catch {}
+        }
+
+        const localNewFindings = runLocalDemoReview(
+          newBody,
+          draft.alt_text,
+          draft.image_url,
+          undefined,
+          draft.brand_id,
+          reportPaletteOff
+        );
         onDraftUpdated(localUpdatedDraft, localNewFindings, llmReview);
       }
     } catch (err: any) {
@@ -495,9 +566,37 @@ export const Report: React.FC<ReportProps> = ({
         <div className="p-4 rounded-xl bg-black/60 border border-zinc-800 text-sm sm:text-base text-zinc-100 font-sans leading-relaxed">
           {draft.body_text || ''}
         </div>
-        {draft.alt_text && (
-          <div className="text-xs text-zinc-400 flex items-center gap-2 pt-1">
-            <span className="font-semibold text-zinc-300">Image Alt Text:</span> {draft.alt_text}
+        {/* FIX 3: Visual asset info line on EVERY Report version */}
+        <div className="text-xs flex flex-wrap items-center gap-2 pt-1.5 border-t border-zinc-850">
+          <span className="font-semibold text-zinc-300">Visual asset:</span>{' '}
+          {draft.image_url ? (
+            <span className="inline-flex items-center gap-1.5 text-zinc-200">
+              <span className="text-emerald-400 font-medium">uploaded</span>
+              {sampledReportColors.length > 0 && (
+                <span className="text-zinc-400 font-mono text-[11px]">
+                  ({sampledReportColors.join(', ')})
+                </span>
+              )}
+              {draft.alt_text && draft.alt_text.trim() ? (
+                <span className="text-zinc-400 text-[11px]">
+                  — Alt: &ldquo;{draft.alt_text}&rdquo;
+                </span>
+              ) : (
+                <span className="text-amber-400 text-[11px] font-mono">(Alt: blank · Rule R-09)</span>
+              )}
+            </span>
+          ) : (
+            <span className="text-zinc-400 font-medium">none uploaded</span>
+          )}
+        </div>
+
+        {/* Warning if Alt text exists with NO image */}
+        {draft.alt_text && !draft.image_url && (
+          <div className="text-xs text-amber-400 bg-amber-950/30 border border-amber-800/40 p-2.5 rounded-lg flex items-center gap-2 mt-2">
+            <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0" />
+            <span>
+              <strong className="font-semibold">Warning:</strong> Alt text &ldquo;{draft.alt_text}&rdquo; was provided, but no visual asset is uploaded for this version.
+            </span>
           </div>
         )}
         {draft.image_url && (

@@ -1148,7 +1148,7 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
                 except Exception as p_exc:
                     logger.warning(f"Could not check previous palette findings: {p_exc}")
 
-            # 2. Backend image analysis fallback for data URLs
+            # 2. Backend image analysis fallback for data URLs and remote URLs
             if active_img_url.startswith("data:image/") and not palette_off:
                 try:
                     parts = active_img_url.split(",", 1)
@@ -1162,6 +1162,21 @@ def review_draft(draft_id: str, payload: Optional[ReviewDraftRequest] = None, re
                             contrast_ratio = img_analysis.get("contrast_ratio")
                 except Exception as img_exc:
                     logger.warning(f"Backend image analysis fallback failed: {img_exc}")
+            elif active_img_url.startswith(("http://", "https://")) and not palette_off:
+                try:
+                    import urllib.request
+                    req = urllib.request.Request(active_img_url, headers={"User-Agent": "BrandGate/1.0"})
+                    with urllib.request.urlopen(req, timeout=3) as resp:
+                        if resp.status == 200:
+                            img_bytes = resp.read()
+                            approved_palette = extract_palette_from_vault(active_vault_items)
+                            img_analysis = analyze_image_bytes(img_bytes, approved_palette)
+                            if img_analysis.get("is_off_palette"):
+                                palette_off = True
+                            if contrast_ratio is None and img_analysis.get("contrast_ratio") is not None:
+                                contrast_ratio = img_analysis.get("contrast_ratio")
+                except Exception as http_img_exc:
+                    logger.warning(f"Backend HTTP image analysis fallback failed: {http_img_exc}")
     else:
         doc_meta = {}
 
@@ -1636,11 +1651,12 @@ def revise_draft(draft_id: str, payload: ReviseDraftRequest, request: Request = 
     actual_id = draft["id"]
 
     new_version_no = draft.get("current_version", 1) + 1
+    new_alt = None if payload.remove_image else (payload.alt_text if payload.alt_text is not None else draft.get("alt_text"))
     version_record = {
         "draft_id": actual_id,
         "version_no": new_version_no,
         "body_text": payload.body_text,
-        "alt_text": payload.alt_text if payload.alt_text is not None else draft.get("alt_text")
+        "alt_text": new_alt,
     }
     supabase.table("draft_versions").insert(version_record).execute()
 
@@ -1652,10 +1668,11 @@ def revise_draft(draft_id: str, payload: ReviseDraftRequest, request: Request = 
     }
     if payload.remove_image:
         update_data["image_url"] = None
+        update_data["alt_text"] = None
     elif payload.image_url is not None:
         update_data["image_url"] = payload.image_url
 
-    if payload.alt_text is not None:
+    if not payload.remove_image and payload.alt_text is not None:
         update_data["alt_text"] = payload.alt_text
 
     supabase.table("drafts").update(update_data).eq("id", actual_id).execute()
