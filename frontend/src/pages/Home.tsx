@@ -112,6 +112,14 @@ export const Home: React.FC<HomeProps> = ({
     }
   };
 
+  const navigateTo = (path: string, e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ path }, '', path);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-20 space-y-8 sm:space-y-16">
       {/* Hero Header */}
@@ -201,6 +209,84 @@ export const Home: React.FC<HomeProps> = ({
             {error}
           </p>
         )}
+      </div>
+
+      {/* Judge? Start here in 60 seconds. Card */}
+      <div
+        id="judge-start-card"
+        className="glass-card feature-card-micro max-w-2xl mx-auto w-full p-4 sm:p-5 rounded-2xl border border-teal-500/30 bg-[#0B1118]/90 shadow-xl shadow-black/40"
+      >
+        <div className="flex items-center gap-2 mb-2 pb-2.5 border-b border-white/[0.06]">
+          <span className="h-2 w-2 rounded-full bg-teal-400 animate-pulse"></span>
+          <h2 className="text-sm sm:text-base font-bold text-white tracking-tight">
+            Judge? Start here in 60 seconds.
+          </h2>
+        </div>
+        <ol className="space-y-1 text-left text-xs sm:text-sm">
+          <li>
+            <a
+              href="/submit"
+              onClick={(e) => {
+                e.preventDefault();
+                handleTryDemoDraft();
+              }}
+              className="group flex items-center justify-between gap-3 p-2 rounded-xl text-zinc-300 hover:text-white hover:bg-teal-500/10 border border-transparent hover:border-teal-500/20 transition-all"
+            >
+              <span className="font-medium break-words group-hover:underline decoration-teal-400/50 underline-offset-2">
+                1. Try Demo Draft (goes to Submit with Demo draft)
+              </span>
+              <ArrowRight className="h-3.5 w-3.5 text-zinc-500 group-hover:text-teal-400 shrink-0 transition-colors" />
+            </a>
+          </li>
+          <li>
+            <a
+              href="/report"
+              onClick={(e) => navigateTo('/report', e)}
+              className="group flex items-center justify-between gap-3 p-2 rounded-xl text-zinc-300 hover:text-white hover:bg-teal-500/10 border border-transparent hover:border-teal-500/20 transition-all"
+            >
+              <span className="font-medium break-words group-hover:underline decoration-teal-400/50 underline-offset-2">
+                2. Review Draft (shows 1x F-12 + 2x R-04)
+              </span>
+              <ArrowRight className="h-3.5 w-3.5 text-zinc-500 group-hover:text-teal-400 shrink-0 transition-colors" />
+            </a>
+          </li>
+          <li>
+            <a
+              href="/report"
+              onClick={(e) => navigateTo('/report', e)}
+              className="group flex items-center justify-between gap-3 p-2 rounded-xl text-zinc-300 hover:text-white hover:bg-teal-500/10 border border-transparent hover:border-teal-500/20 transition-all"
+            >
+              <span className="font-medium break-words group-hover:underline decoration-teal-400/50 underline-offset-2">
+                3. Apply Fix (price, then superlatives)
+              </span>
+              <ArrowRight className="h-3.5 w-3.5 text-zinc-500 group-hover:text-teal-400 shrink-0 transition-colors" />
+            </a>
+          </li>
+          <li>
+            <a
+              href="/review"
+              onClick={(e) => navigateTo('/review', e)}
+              className="group flex items-center justify-between gap-3 p-2 rounded-xl text-zinc-300 hover:text-white hover:bg-teal-500/10 border border-transparent hover:border-teal-500/20 transition-all"
+            >
+              <span className="font-medium break-words group-hover:underline decoration-teal-400/50 underline-offset-2">
+                4. Request Approval (as Creator)
+              </span>
+              <ArrowRight className="h-3.5 w-3.5 text-zinc-500 group-hover:text-teal-400 shrink-0 transition-colors" />
+            </a>
+          </li>
+          <li>
+            <a
+              href="/review"
+              onClick={(e) => navigateTo('/review', e)}
+              className="group flex items-center justify-between gap-3 p-2 rounded-xl text-zinc-300 hover:text-white hover:bg-teal-500/10 border border-transparent hover:border-teal-500/20 transition-all"
+            >
+              <span className="font-medium break-words group-hover:underline decoration-teal-400/50 underline-offset-2">
+                5. Switch to Reviewer → Approve → Locked Snapshot
+              </span>
+              <ArrowRight className="h-3.5 w-3.5 text-zinc-500 group-hover:text-teal-400 shrink-0 transition-colors" />
+            </a>
+          </li>
+        </ol>
       </div>
 
       {/* Proof / Verification Metrics Strip (Linear-Style Ground Truth) */}

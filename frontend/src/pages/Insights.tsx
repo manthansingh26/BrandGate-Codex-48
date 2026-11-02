@@ -421,9 +421,14 @@ export const Insights: React.FC<InsightsProps> = ({
               </div>
             )}
           </div>
-          <span className="text-[11px] text-zinc-500 mt-3 pt-2 border-t border-zinc-800/80 block">
-            Latest vs historical draft findings
-          </span>
+          <div className="mt-3 pt-2 border-t border-zinc-800/80 space-y-1">
+            <span className="text-[11px] text-zinc-500 block">
+              Latest vs historical draft findings
+            </span>
+            <p className="text-[10px] text-zinc-500 leading-tight">
+              Trend compares latest draft with average of earlier drafts (not total flags ÷ drafts).
+            </p>
+          </div>
         </div>
 
         {/* Total Drafts & Findings */}
