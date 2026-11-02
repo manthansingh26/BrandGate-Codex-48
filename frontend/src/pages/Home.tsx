@@ -8,7 +8,7 @@ import { ArrowRight, ShieldCheck, FileText, Sparkles, Loader2, BookOpen, CheckCi
 interface HomeProps {
   activeBrand: Brand | null;
   availableBrands?: Brand[];
-  onSelectBrand?: (brand: Brand) => void;
+  onSelectBrand?: (brand: Brand) => void | Promise<void>;
   onDraftCreated: (draft: Draft) => void;
   onNavigateToVault?: () => void;
   apiStatus: ApiConnectionStatus;
@@ -27,6 +27,7 @@ export const Home: React.FC<HomeProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showReplaceModal, setShowReplaceModal] = useState(false);
+  const [targetBrandForReplace, setTargetBrandForReplace] = useState<Brand | null>(null);
 
   // Close replace modal on Escape key
   useEffect(() => {
@@ -39,20 +40,39 @@ export const Home: React.FC<HomeProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showReplaceModal]);
 
-  const handleTryDemoDraft = () => {
-    if (currentDraft && currentDraft.status === 'approved') {
+  const handleTryDemoDraft = (targetBrand?: Brand | React.MouseEvent | unknown) => {
+    const brandToUse = (targetBrand && typeof targetBrand === 'object' && 'id' in targetBrand)
+      ? (targetBrand as Brand)
+      : activeBrand;
+    if (currentDraft && currentDraft.brand_id === brandToUse?.id && currentDraft.status === 'approved') {
+      setTargetBrandForReplace(brandToUse || null);
       setShowReplaceModal(true);
       return;
     }
-    executeTryDemoDraft();
+    executeTryDemoDraft(brandToUse);
   };
 
-  const executeTryDemoDraft = async () => {
+  const handleJudgeStep1 = async (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    const demoBrand = availableBrands?.find(
+      (b) => b.id === '00000000-0000-0000-0000-000000000001'
+    ) || { id: '00000000-0000-0000-0000-000000000001', name: 'Demo Brand (Seeded)', created_by: 'system' };
+
+    // Force brand switch to Demo Brand first using the existing brand-switch mechanism
+    if (onSelectBrand && activeBrand?.id !== demoBrand.id) {
+      await onSelectBrand(demoBrand);
+    }
+    handleTryDemoDraft(demoBrand);
+  };
+
+  const executeTryDemoDraft = async (targetBrand?: Brand | null) => {
     setShowReplaceModal(false);
     setLoading(true);
     setError(null);
+    setTargetBrandForReplace(null);
 
-    const isBrandB = activeBrand?.id === '00000000-0000-0000-0000-000000000002';
+    const brandToUse = targetBrand || activeBrand;
+    const isBrandB = brandToUse?.id === '00000000-0000-0000-0000-000000000002';
     const exactDemoText = isBrandB
       ? "Experience NovaTech ANC 500 with world's best audio and 80-hour battery life — now for just Rs. 3,499!"
       : "Diwali Dhamaka! India's No. 1 cookware brand — clinically proven non-stick — now for just Rs. 999!";
@@ -61,7 +81,7 @@ export const Home: React.FC<HomeProps> = ({
       : "Diwali Festive Cookware Campaign";
 
     try {
-      let brandId = activeBrand?.id;
+      let brandId = brandToUse?.id;
 
       if (!brandId) {
         const brands = await api.getBrands().catch(() => []);
@@ -226,10 +246,7 @@ export const Home: React.FC<HomeProps> = ({
           <li>
             <a
               href="/submit"
-              onClick={(e) => {
-                e.preventDefault();
-                handleTryDemoDraft();
-              }}
+              onClick={handleJudgeStep1}
               className="group flex items-center justify-between gap-3 p-2 rounded-xl text-zinc-300 hover:text-white hover:bg-teal-500/10 border border-transparent hover:border-teal-500/20 transition-all"
             >
               <span className="font-medium break-words group-hover:underline decoration-teal-400/50 underline-offset-2">
@@ -428,7 +445,7 @@ export const Home: React.FC<HomeProps> = ({
               </button>
               <button
                 type="button"
-                onClick={executeTryDemoDraft}
+                onClick={() => executeTryDemoDraft(targetBrandForReplace)}
                 className="btn-primary-micro px-5 py-2.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-xs shadow-lg shadow-teal-500/20"
               >
                 Continue with a fresh demo draft

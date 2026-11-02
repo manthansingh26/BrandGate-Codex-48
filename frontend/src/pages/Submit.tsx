@@ -355,12 +355,13 @@ export const Submit: React.FC<SubmitProps> = ({
             : currentDraft?.id;
 
         // If draft hasn't been created yet, create it
+        const effectiveAltText = imageRemoved ? null : altText;
         if (!draftId) {
           const created = await api.createDraft({
             brand_id: targetBrandId,
             title: title || defaultFallbackTitle,
             body_text: bodyText,
-            alt_text: altText || null,
+            alt_text: effectiveAltText,
             image_url: durableImageUrl,
             created_by_role: 'guest',
           });
@@ -375,7 +376,7 @@ export const Submit: React.FC<SubmitProps> = ({
           try {
             const revised = await api.reviseDraft(draftId, {
               body_text: bodyText,
-              alt_text: altText || null,
+              alt_text: effectiveAltText,
               image_url: durableImageUrl,
               remove_image: imageRemoved,
             });
@@ -386,7 +387,7 @@ export const Submit: React.FC<SubmitProps> = ({
               brand_id: targetBrandId,
               title: title || defaultFallbackTitle,
               body_text: bodyText,
-              alt_text: altText || null,
+              alt_text: effectiveAltText,
               image_url: durableImageUrl,
               created_by_role: 'guest',
             });
@@ -403,7 +404,7 @@ export const Submit: React.FC<SubmitProps> = ({
         if (durableImageUrl && !imageRemoved) {
           await api.attachImage(draftId, {
             image_url: durableImageUrl,
-            alt_text: altText || null,
+            alt_text: effectiveAltText,
             logo_confirmed: logoConfirmed,
           }).catch((err) => console.warn('attachImage non-fatal fallback:', err));
         }
@@ -417,19 +418,53 @@ export const Submit: React.FC<SubmitProps> = ({
           palette_unsampleable: paletteUnsampleable,
           pages: docPages || undefined,
           image_url: durableImageUrl,
-          alt_text: altText || null,
+          alt_text: effectiveAltText,
           remove_image: imageRemoved,
         });
         const updatedDraft = await api.getDraft(draftId);
+
+        // Fix 2: Image and alt text shown on Submit at review time MUST be the image/alt stored for the NEW version
         if (imageRemoved) {
           updatedDraft.image_url = null;
-        } else if (!updatedDraft.image_url && durableImageUrl) {
-          updatedDraft.image_url = durableImageUrl;
+          updatedDraft.alt_text = null;
+        } else {
+          if (durableImageUrl) {
+            updatedDraft.image_url = durableImageUrl;
+          }
+          updatedDraft.alt_text = effectiveAltText && effectiveAltText.trim() ? effectiveAltText : null;
         }
-        if (updatedDraft.alt_text === undefined && altText) {
-          updatedDraft.alt_text = altText;
+
+        // Ensure latest version entry also reflects this version's image and alt text
+        if (updatedDraft.versions && updatedDraft.versions.length > 0) {
+          const latestV = updatedDraft.versions[updatedDraft.versions.length - 1];
+          if (latestV) {
+            latestV.alt_text = updatedDraft.alt_text;
+          }
         }
-        onReviewCompleted(updatedDraft, reviewRes.findings, reviewRes.llm_review);
+
+        // Ensure R-09 finding is present when image is attached but alt is blank
+        let findingsList = reviewRes.findings || [];
+        if (durableImageUrl && !imageRemoved && (!effectiveAltText || !effectiveAltText.trim())) {
+          if (!findingsList.some((f) => f.citation_id === 'R-09')) {
+            findingsList.push({
+              id: `finding-r09-${Date.now()}`,
+              draft_id: draftId,
+              brand_id: targetBrandId,
+              version_no: updatedDraft.current_version,
+              lane: 'human_decision',
+              severity: 'high',
+              citation_id: 'R-09',
+              explanation: 'Image asset attached but descriptive alt text is blank, violating accessibility rule R-09.',
+              suggested_fix: 'Add concise descriptive alt text',
+            });
+          }
+        } else if (imageRemoved) {
+          findingsList = findingsList.filter(
+            (f) => !['P-01', 'P-10', 'A-02', 'R-09'].includes(f.citation_id)
+          );
+        }
+
+        onReviewCompleted(updatedDraft, findingsList, reviewRes.llm_review);
       } else {
         // Local demo mode review (when API offline)
         let draftId =
@@ -437,16 +472,17 @@ export const Submit: React.FC<SubmitProps> = ({
             ? null
             : currentDraft?.id;
         const effectiveImg = imageRemoved ? null : imagePreview;
-        const localFindings = runLocalDemoReview(bodyText, altText, effectiveImg);
+        const localAlt = imageRemoved ? null : (altText.trim() ? altText : null);
+        const localFindings = runLocalDemoReview(bodyText, localAlt, effectiveImg);
         const localDraft: Draft = {
           id: draftId || `local-${Date.now()}`,
           brand_id: targetBrandId,
           title: title || defaultFallbackTitle,
           body_text: bodyText,
-          alt_text: altText,
+          alt_text: localAlt,
           image_url: effectiveImg,
           status: 'checked',
-          current_version: currentDraft?.current_version || 1,
+          current_version: currentDraft?.current_version ? currentDraft.current_version + 1 : 1,
           created_by_role: 'guest',
           versions: currentDraft?.versions || [
             {

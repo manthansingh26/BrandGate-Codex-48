@@ -3,6 +3,7 @@ import { Draft, Finding, ApiConnectionStatus, LlmReviewResult, Brand } from '../
 import { api } from '../api/client';
 import { BrandSwitcher } from '../components/BrandSwitcher';
 import { runLocalDemoReview } from '../utils/localReviewEngine';
+import { sampleImageColors, APPROVED_BRAND_PALETTE, APPROVED_BRAND_B_PALETTE } from '../utils/imageAnalysis';
 import { Check, ArrowRight, RefreshCw, Sparkles, AlertCircle, AlertTriangle, ShieldCheck, CheckCircle2, Bot, Info } from 'lucide-react';
 
 interface ReportProps {
@@ -55,6 +56,32 @@ export const Report: React.FC<ReportProps> = ({
       if (timer) clearInterval(timer);
     };
   }, [applyingFixId]);
+
+  const [sampledReportColors, setSampledReportColors] = useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    if (draft?.image_url) {
+      const isBrandB = draft.brand_id === '00000000-0000-0000-0000-000000000002';
+      const palette = isBrandB ? APPROVED_BRAND_B_PALETTE : APPROVED_BRAND_PALETTE;
+      sampleImageColors(draft.image_url, palette)
+        .then((result) => {
+          if (active && result.status === 'analyzed') {
+            setSampledReportColors(result.sampledColors);
+          } else if (active) {
+            setSampledReportColors([]);
+          }
+        })
+        .catch(() => {
+          if (active) setSampledReportColors([]);
+        });
+    } else {
+      setSampledReportColors([]);
+    }
+    return () => {
+      active = false;
+    };
+  }, [draft?.id, draft?.current_version, draft?.image_url]);
 
   if (!draft) {
     if (isRestoringDraft) {
@@ -182,9 +209,11 @@ export const Report: React.FC<ReportProps> = ({
         try {
           const reviewRes = await api.reviewDraft(draft.id);
           const updatedDraft = await api.getDraft(draft.id);
-          // Sync versions so receipt timestamp remains aligned
+          // Sync versions so receipt timestamp remains aligned while preserving attached image
           const synchronizedDraft: Draft = {
             ...updatedDraft,
+            image_url: updatedDraft.image_url || draft.image_url,
+            alt_text: updatedDraft.alt_text !== undefined ? updatedDraft.alt_text : draft.alt_text,
             versions:
               updatedDraft.versions && updatedDraft.versions.length >= (immediateDraft.versions?.length || 0)
                 ? updatedDraft.versions
@@ -504,6 +533,25 @@ export const Report: React.FC<ReportProps> = ({
                   <span className="font-semibold text-zinc-300">Contrast Threshold:</span>{' '}
                   <span className="text-zinc-400">WCAG 2.1 AA 4.5:1 minimum standard</span>
                 </div>
+                {sampledReportColors.length > 0 && (
+                  <div className="pt-1.5 flex items-center gap-2">
+                    <span className="font-semibold text-zinc-300">Sampled Palette:</span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {sampledReportColors.map((hex, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-[10px] font-mono text-zinc-300"
+                        >
+                          <span
+                            className="w-2 h-2 rounded-full inline-block border border-white/20"
+                            style={{ backgroundColor: hex }}
+                          ></span>
+                          {hex}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -566,7 +614,7 @@ export const Report: React.FC<ReportProps> = ({
             <p className="text-sm text-zinc-400 max-w-md mx-auto">
               {draft.status === 'approved' ? (
                 'Approved and locked — see Review for the locked snapshot'
-              ) : draft.image_url ? (
+              ) : (Boolean((draft.image_url && draft.image_url.trim()) || (draft.alt_text && draft.alt_text.trim()) || draft.document_meta?.has_images)) ? (
                 'Creative copy and uploaded visual asset align with all active Brand Vault rules. Proceed to the review tab to request final reviewer sign-off.'
               ) : (
                 'Creative copy aligns with all active Brand Vault rules (no visual asset was uploaded for this draft). Proceed to the review tab to request final reviewer sign-off.'
